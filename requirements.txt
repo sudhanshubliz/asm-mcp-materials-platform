@@ -1,0 +1,16 @@
+fastmcp
+fastapi
+uvicorn
+sqlalchemy
+pyodbc
+requests
+mp-api
+pydantic
+redis
+sentence-transformers
+qdrant-client
+azure-identity
+azure-keyvault-secrets
+opentelemetry-sdk
+python-dotenv
+pytest

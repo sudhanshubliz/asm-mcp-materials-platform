@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asm-mcp-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: asm-mcp-server
+  template:
+    metadata:
+      labels:
+        app: asm-mcp-server
+    spec:
+      containers:
+        - name: mcp-server
+          image: asm-mcp:latest
+          ports:
+            - containerPort: 8000
