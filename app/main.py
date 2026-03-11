@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException, Path
 from fastmcp import FastMCP
 
@@ -9,10 +11,8 @@ from app.services.materials_service import get_material_by_id
 from app.tools.materials_tools import ask_materials_project_tool, get_material_by_id_tool, search_material_tool
 from app.tools.rag_tools import rag_search_tool
 from app.tools.sql_tools import run_sql_query
-
 import logging
-logging.basicConfig(level=logging.ERROR)
-
+logging.basicConfig(level=logging.INFO)
 setup_logging()
 
 mcp = FastMCP(name="ASM Materials MCP Server")
@@ -95,4 +95,10 @@ def rag_search(
 
 
 if __name__ == "__main__":
-    mcp.run()
+    transport = os.getenv("MCP_TRANSPORT", "stdio").strip().lower()
+    if transport == "http":
+        host = os.getenv("MCP_HOST", "0.0.0.0")
+        port = int(os.getenv("MCP_PORT", "8000"))
+        mcp.run(transport="http", host=host, port=port)
+    else:
+        mcp.run()

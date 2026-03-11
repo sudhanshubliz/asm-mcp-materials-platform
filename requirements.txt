@@ -14,3 +14,4 @@ azure-keyvault-secrets
 opentelemetry-sdk
 python-dotenv
 pytest
+mcp

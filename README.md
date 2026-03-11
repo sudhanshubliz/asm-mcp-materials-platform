@@ -91,6 +91,25 @@ export OQMD_REQUIRED="true"
 pytest
 ```
 
+## MCP Inspector (local tool testing)
+
+Use MCP Inspector to test MCP tools interactively.
+
+Prerequisites:
+- Node.js installed (`npx` available)
+- `.venv` created with dependencies installed
+- `MATERIALS_API_KEY` set in `.env` or exported in shell
+
+Run:
+
+```bash
+./scripts/run_mcp_inspector.sh
+```
+
+This launches MCP Inspector and connects to:
+- command: `.venv/bin/python`
+- args: `-m app.main`
+
 ## API examples
 
 ```bash
