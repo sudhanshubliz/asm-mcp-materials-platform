@@ -1,123 +1,294 @@
 # ASM MCP Materials Platform
 
-Production-oriented MCP server scaffold for AI-driven materials discovery with Copilot.
+Enterprise MCP and API server for materials discovery workflows. The project exposes Materials Project, OQMD, SQL, and RAG capabilities through:
 
-## What this implements
+- MCP tools for Claude, Cursor, GitHub Copilot, and other MCP clients
+- FastAPI endpoints for direct REST testing
 
-- `FastMCP` server with tools:
-  - `search_material_tool`
-  - `run_sql_query`
-  - `rag_search_tool`
-- `FastAPI` service endpoints for API-style access.
-- Services for Materials Project, OQMD, SQL, and RAG (Qdrant + embeddings).
-- Azure AD token helper and role-based request guards.
-- Input validation via Pydantic schemas.
-- Read-only SQL safety checks (SELECT/CTE only, limited rows).
-- Redis cache with in-memory fallback when Redis is unavailable.
+## What the project does
 
-## Project layout
+- Queries Materials Project using your API key
+- Queries OQMD and returns federated materials results
+- Supports natural-language materials prompts through `ask_materials_project_tool`
+- Exposes read-only SQL query and RAG search tools
+- Provides both `stdio` MCP transport and optional HTTP MCP transport
 
-- `app/main.py`: MCP + API entrypoints
-- `app/tools/`: MCP-callable tools
-- `app/services/`: external/internal data access
-- `app/models/`: request schemas and validation
-- `app/cache/`: Redis cache abstraction
-- `tests/`: unit tests
+## Current MCP tools
 
-## Environment variables
+- `search_material_tool`
+- `get_material_by_id_tool`
+- `ask_materials_project_tool`
+- `run_sql_query`
+- `rag_search_tool`
 
-- `SQL_CONNECTION_STRING` or `SQL_CONNECTION`
-- `MATERIALS_API` (default: `https://next-gen.materialsproject.org/api`)
-- `MATERIALS_SUMMARY_PATH` (default: `/materials/summary`)
-- `MATERIALS_API_KEY`
-- `MATERIALS_API_KEY_HEADER` (default: `X-API-KEY`)
-- `MATERIALS_API_MODE` (`auto`/`rest`/`mp_api`, default: `auto`)
-- `OQMD_API` (default: `https://oqmd.org/api`)
-- `OQMD_RESOURCE` (default: `formationenergy`)
-- `OQMD_REQUIRED` (`true` by default; set `false` to skip OQMD)
-- `REDIS_HOST`
-- `REDIS_PORT`
-- `VECTOR_DB`
-- `RAG_COLLECTION`
-- `RAG_TOP_K`
-- `REQUEST_TIMEOUT`
-- `SQL_MAX_ROWS`
-- `MCP_REQUIRE_AUTH` (`true`/`false`)
-- `ALLOWED_ROLES` (comma-separated)
+## REST endpoints
 
-## Run locally
+- `GET /health`
+- `POST /api/materials/search`
+- `GET /api/materials/{material_id}`
+- `POST /api/sql/query`
+- `POST /api/rag/search`
+
+## Prerequisites
+
+- macOS, Linux, or Windows with shell access
+- Python `3.10+` and a working virtual environment
+- Materials Project API key
+- Optional: Node.js if you want to use MCP Inspector
+- Optional: Redis, Qdrant, and Azure SQL if you want full non-mocked integrations
+
+## Project structure
+
+- [app/main.py](/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/app/main.py): MCP entrypoint and FastAPI app
+- [app/tools/materials_tools.py](/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/app/tools/materials_tools.py): MCP tools
+- [app/services/materials_service.py](/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/app/services/materials_service.py): Materials Project integration
+- [app/services/oqmd_service.py](/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/app/services/oqmd_service.py): OQMD integration
+- [tests/](/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/tests): unit tests
+
+## Installation
+
+Create and activate a virtual environment:
 
 ```bash
-pip install -r requirements.txt
-python app/main.py
+cd /Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-You can keep local configuration in `.env` (auto-loaded):
+Install dependencies:
+
+```bash
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+```
+
+## Configuration
+
+Create local environment configuration:
 
 ```bash
 cp .env.example .env
 ```
 
-## Materials Project API key setup
+Minimum useful `.env` values:
 
-Set your key as an environment variable (do not hardcode in source):
-
-```bash
-export MATERIALS_API_KEY="<your_api_key>"
+```env
+MATERIALS_API_KEY=replace_with_new_key
+MATERIALS_API=https://next-gen.materialsproject.org/api
+MATERIALS_API_MODE=auto
+OQMD_API=https://oqmd.org/api
+OQMD_RESOURCE=formationenergy
+OQMD_REQUIRED=true
+SQL_CONNECTION=sqlite+pysqlite:///:memory:
+MCP_REQUIRE_AUTH=false
 ```
 
-The integration uses the official `mp-api` Python client (required by Materials Project).
-Install dependencies again after pulling latest changes:
+Key environment variables:
+
+- `MATERIALS_API_KEY`: required for Materials Project access
+- `MATERIALS_API`: Materials Project base URL
+- `MATERIALS_API_MODE`: `auto`, `rest`, or `mp_api`
+- `OQMD_API`: OQMD base URL
+- `OQMD_RESOURCE`: OQMD resource path, currently `formationenergy`
+- `OQMD_REQUIRED`: when `true`, federated search includes OQMD
+- `MCP_REQUIRE_AUTH`: when `false`, local testing is easier
+
+## Running locally
+
+Run the MCP server over `stdio` for Claude, Cursor, and Copilot:
 
 ```bash
-pip install -r requirements.txt
+source .venv/bin/activate
+python -m app.main
 ```
 
-Optional legacy endpoint vars (kept for compatibility):
+Run the REST API locally:
 
 ```bash
-export MATERIALS_API="https://next-gen.materialsproject.org/api"
-export MATERIALS_SUMMARY_PATH="/materials/summary"
-export MATERIALS_API_KEY_HEADER="X-API-KEY"
-export MATERIALS_API_MODE="auto"
-export OQMD_API="https://oqmd.org/api"
-export OQMD_RESOURCE="formationenergy"
-export OQMD_REQUIRED="true"
+source .venv/bin/activate
+python -m uvicorn app.main:api --host 127.0.0.1 --port 8001
 ```
 
-## Test
+Run MCP over HTTP only if you explicitly need it:
 
 ```bash
-pytest
+export MCP_TRANSPORT=http
+export MCP_PORT=8000
+python -m app.main
 ```
 
-## MCP Inspector (local tool testing)
+## Testing
 
-Use MCP Inspector to test MCP tools interactively.
-
-Prerequisites:
-- Node.js installed (`npx` available)
-- `.venv` created with dependencies installed
-- `MATERIALS_API_KEY` set in `.env` or exported in shell
-
-Run:
+Run unit tests:
 
 ```bash
-./scripts/run_mcp_inspector.sh
+source .venv/bin/activate
+pytest -q
 ```
 
-This launches MCP Inspector and connects to:
-- command: `.venv/bin/python`
-- args: `-m app.main`
+Test REST endpoints:
 
-## API examples
+```bash
+curl -sS http://127.0.0.1:8001/health
+```
+
+```bash
+curl -sS -X POST http://127.0.0.1:8001/api/materials/search \
+  -H "Content-Type: application/json" \
+  -d '{"formula":"Fe2O3","limit":5,"offset":0}'
+```
 
 ```bash
 curl -sS http://127.0.0.1:8001/api/materials/mp-csvwu
 ```
 
-## Docker
+Swagger UI:
+
+- [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+- [http://127.0.0.1:8001/redoc](http://127.0.0.1:8001/redoc)
+
+## MCP Inspector
+
+Use the bundled launcher:
 
 ```bash
-docker compose up --build
+./scripts/run_mcp_inspector.sh
 ```
+
+This starts Inspector against:
+
+- command: `.venv/bin/python`
+- args: `-m app.main`
+
+## Claude Desktop setup
+
+Claude Desktop config file on macOS:
+
+- `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Example:
+
+```json
+{
+  "mcpServers": {
+    "materials-platform": {
+      "command": "/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/.venv/bin/python",
+      "args": ["-m", "app.main"],
+      "env": {
+        "PYTHONPATH": "/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform",
+        "MATERIALS_API_KEY": "YOUR_ROTATED_KEY",
+        "MATERIALS_API": "https://next-gen.materialsproject.org/api",
+        "OQMD_API": "https://oqmd.org/api",
+        "OQMD_RESOURCE": "formationenergy",
+        "OQMD_REQUIRED": "true",
+        "MCP_REQUIRE_AUTH": "false"
+      }
+    }
+  }
+}
+```
+
+After editing:
+
+1. Quit Claude Desktop fully.
+2. Reopen Claude Desktop.
+3. Ask Claude to call one of the MCP tools directly.
+
+Example Claude prompts:
+
+- `Call get_material_by_id_tool with material_id "mp-csvwu"`
+- `Call ask_materials_project_tool with question "Retrieve full structural and electronic properties for material Dy"`
+
+## Cursor setup
+
+Cursor MCP config can be placed either globally or per-project:
+
+- `~/.cursor/mcp.json`
+- `/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/.cursor/mcp.json`
+
+Example:
+
+```json
+{
+  "mcpServers": {
+    "materials-platform": {
+      "command": "/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/.venv/bin/python",
+      "args": ["-m", "app.main"],
+      "cwd": "/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform",
+      "env": {
+        "MATERIALS_API_KEY": "YOUR_ROTATED_KEY",
+        "MATERIALS_API": "https://next-gen.materialsproject.org/api",
+        "OQMD_API": "https://oqmd.org/api",
+        "OQMD_RESOURCE": "formationenergy",
+        "OQMD_REQUIRED": "true",
+        "MCP_REQUIRE_AUTH": "false"
+      }
+    }
+  }
+}
+```
+
+After editing:
+
+1. Quit Cursor fully.
+2. Reopen Cursor.
+3. Verify the MCP server appears in Cursor MCP settings.
+
+## GitHub Copilot setup
+
+GitHub Copilot MCP support depends on the host application. Use the same server command:
+
+```json
+{
+  "mcpServers": {
+    "materials-platform": {
+      "command": "/Users/sudhanshu_thakur/Documents/workspace/asm-mcp-materials-platform/.venv/bin/python",
+      "args": ["-m", "app.main"]
+    }
+  }
+}
+```
+
+For GitHub Copilot:
+
+1. Open the MCP configuration UI or settings entry provided by your Copilot host.
+2. Add a new MCP server named `materials-platform`.
+3. Use the command and args shown above.
+4. Add the required environment variables from `.env`.
+5. Restart the host if the MCP tools do not appear immediately.
+
+For current host-specific details, use the official GitHub Copilot MCP docs:
+
+- [GitHub Copilot MCP documentation](https://docs.github.com/copilot)
+
+## Example MCP prompts
+
+Natural language tool prompt:
+
+```text
+Call ask_materials_project_tool with question "Retrieve full structural and electronic properties for material Dy"
+```
+
+Examples supported by the unified materials tool:
+
+- `Pull materials where shear modulus VRH is above 80 and density is below 6`
+- `List materials where weighted surface energy is low and predicted_stable = true`
+- `Find materials with work function between 4.5 and 5.5`
+- `List materials with cubic and show their space group symbol, space group number`
+- `Find materials with vol >200 and dens <3`
+- `Retrieve materials for hexagonal with band gap above 2`
+- `Browse materials with high surface anisotropy and shape factor >1.2`
+
+## Troubleshooting
+
+- If Claude or Cursor connects and immediately disconnects, confirm you are running `stdio` transport, not forced `http`.
+- If Materials Project returns `403`, use `MATERIALS_API_MODE=mp_api` or `auto`.
+- If `ModuleNotFoundError: app` appears in Claude, add `PYTHONPATH` to the MCP client env.
+- If OQMD is slow or unavailable, set `OQMD_REQUIRED=false`.
+- If the server prints secrets in local config files or logs, rotate the API key.
+
+## Security notes
+
+- Do not commit `.env`
+- Do not hardcode API keys into `mcp.json`, `claude_desktop_config.json`, or screenshots
+- Rotate any Materials Project key that has been shared in chat, logs, or config history
