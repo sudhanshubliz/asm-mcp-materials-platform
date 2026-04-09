@@ -13,6 +13,8 @@ from streamlit_ui.components.sidebar import render_sidebar
 from streamlit_ui.utils.session import initialize_state
 from streamlit_ui.utils.theme import apply_theme
 
+HOME_PAGE = "app.py"
+
 
 def main() -> None:
     apply_theme()
@@ -30,7 +32,7 @@ def main() -> None:
         col1, col2 = st.columns([6, 1])
         if col1.button(query, key=f"saved-page::{query}", use_container_width=True):
             st.session_state.pending_prompt = query
-            st.switch_page("streamlit_ui/app.py")
+            st.switch_page(HOME_PAGE)
         if col2.button("Remove", key=f"remove::{query}", use_container_width=True):
             st.session_state.saved_queries = [item for item in st.session_state.saved_queries if item != query]
             st.rerun()

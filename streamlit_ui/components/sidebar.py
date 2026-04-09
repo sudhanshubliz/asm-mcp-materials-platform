@@ -6,6 +6,8 @@ from streamlit_ui.services.mcp_client import MCPClientService
 from streamlit_ui.utils.constants import SAMPLE_PROMPTS
 from streamlit_ui.utils.session import save_query
 
+HOME_PAGE = "app.py"
+
 
 @st.cache_resource(show_spinner=False)
 def get_sidebar_client() -> MCPClientService:
@@ -40,20 +42,20 @@ def render_sidebar() -> None:
             if st.button(prompt, key=f"prompt::{prompt}", use_container_width=True):
                 st.session_state.pending_prompt = prompt
                 save_query(st.session_state, prompt)
-                st.switch_page("streamlit_ui/app.py")
+                st.switch_page(HOME_PAGE)
 
         st.markdown("### Recent searches")
         for recent in st.session_state.recent_searches[:5]:
             if st.button(recent, key=f"recent::{recent}", use_container_width=True):
                 st.session_state.pending_prompt = recent
-                st.switch_page("streamlit_ui/app.py")
+                st.switch_page(HOME_PAGE)
 
         st.markdown("### Saved queries")
         for saved in st.session_state.saved_queries[:5]:
             col1, col2 = st.columns([5, 1])
             if col1.button(saved, key=f"saved::{saved}", use_container_width=True):
                 st.session_state.pending_prompt = saved
-                st.switch_page("streamlit_ui/app.py")
+                st.switch_page(HOME_PAGE)
             if col2.button("★", key=f"star::{saved}", use_container_width=True):
                 st.toast(f"Saved query pinned: {saved}")
 
