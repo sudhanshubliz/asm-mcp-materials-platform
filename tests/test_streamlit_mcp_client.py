@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from streamlit_ui.services.mcp_client import MCPClientService
+from streamlit_ui.services.mcp_client import LOCAL_MCP_URL, MCPClientService, RENDER_MCP_URL
 
 
 def test_call_tool_retries_then_succeeds(monkeypatch):
@@ -50,3 +50,30 @@ def test_compare_materials_combines_mp_ids_and_formulas(monkeypatch):
     records = client.compare_materials(["mp-149", "GaAs"])
 
     assert [record["formula_pretty"] for record in records] == ["Si", "GaAs"]
+
+
+def test_client_uses_explicit_base_url_without_auto_resolution():
+    client = MCPClientService(base_url="https://example.com/mcp")
+
+    assert client.base_url == "https://example.com/mcp"
+
+
+def test_client_auto_falls_back_to_render_when_local_unavailable(monkeypatch):
+    def fake_probe(url, timeout_seconds):
+        return url == RENDER_MCP_URL
+
+    monkeypatch.setattr("streamlit_ui.services.mcp_client._probe_health", fake_probe)
+    monkeypatch.setattr("streamlit_ui.services.mcp_client._get_env_or_secret", lambda name, default="": "")
+
+    client = MCPClientService(base_url=None)
+
+    assert client.base_url == RENDER_MCP_URL
+
+
+def test_client_defaults_to_local_when_no_probe_succeeds(monkeypatch):
+    monkeypatch.setattr("streamlit_ui.services.mcp_client._probe_health", lambda url, timeout_seconds: False)
+    monkeypatch.setattr("streamlit_ui.services.mcp_client._get_env_or_secret", lambda name, default="": "")
+
+    client = MCPClientService(base_url=None)
+
+    assert client.base_url == LOCAL_MCP_URL

@@ -11,6 +11,9 @@ import httpx
 from cachetools import TTLCache
 from fastmcp import Client
 
+LOCAL_MCP_URL = "http://localhost:8000/mcp"
+RENDER_MCP_URL = "https://asm-mcp-materials-platform.onrender.com/mcp"
+
 
 class MCPClientError(RuntimeError):
     pass
@@ -41,16 +44,43 @@ def _get_env_or_secret(name: str, default: str) -> str:
     return default
 
 
+def _health_url_for(base_url: str) -> str:
+    if base_url.endswith("/mcp"):
+        return f"{base_url[:-4]}/health"
+    return f"{base_url}/health"
+
+
+def _probe_health(base_url: str, timeout_seconds: float) -> bool:
+    try:
+        response = httpx.get(_health_url_for(base_url), timeout=timeout_seconds)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _resolve_mcp_server_url(timeout_seconds: float) -> str:
+    configured = _get_env_or_secret("MCP_SERVER_URL", "").strip()
+    if configured:
+        return configured.rstrip("/")
+
+    for candidate in (LOCAL_MCP_URL, RENDER_MCP_URL):
+        if _probe_health(candidate, timeout_seconds=min(timeout_seconds, 3.0)):
+            return candidate
+
+    return LOCAL_MCP_URL
+
+
 class MCPClientService:
     def __init__(
         self,
         base_url: str | None = None,
-        timeout_seconds: float = 20.0,
-        retry_attempts: int = 3,
+        timeout_seconds: float = 45.0,
+        retry_attempts: int = 2,
         retry_backoff_seconds: float = 0.6,
         cache_ttl_seconds: int = 180,
     ) -> None:
-        self.base_url = (base_url or _get_env_or_secret("MCP_SERVER_URL", "http://localhost:8000/mcp")).rstrip("/")
+        resolved_base_url = base_url or _resolve_mcp_server_url(timeout_seconds)
+        self.base_url = resolved_base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.retry_attempts = retry_attempts
         self.retry_backoff_seconds = retry_backoff_seconds
@@ -59,9 +89,7 @@ class MCPClientService:
 
     @property
     def health_url(self) -> str:
-        if self.base_url.endswith("/mcp"):
-            return f"{self.base_url[:-4]}/health"
-        return f"{self.base_url}/health"
+        return _health_url_for(self.base_url)
 
     def _cache_key(self, tool_name: str, arguments: dict[str, Any]) -> str:
         return json.dumps({"tool": tool_name, "arguments": arguments}, sort_keys=True, default=str)
@@ -110,7 +138,7 @@ class MCPClientService:
                     break
                 time.sleep(self.retry_backoff_seconds * attempt)
 
-        raise MCPClientError(f"Tool call failed for {tool_name}: {last_error}")
+        raise MCPClientError(f"Tool call failed for {tool_name} via {self.base_url}: {last_error}")
 
     def compare_materials(self, targets: list[str]) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
