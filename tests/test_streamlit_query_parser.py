@@ -16,6 +16,13 @@ def test_parse_query_detects_compare_from_common_names():
     assert plan.compare_targets == ["Si", "GaAs"]
 
 
+def test_parse_query_detects_comparison_phrase():
+    plan = parse_user_query("Comparison of HfO2 and ZrO2: Band Gap and Stability")
+
+    assert plan.intent == "compare"
+    assert plan.compare_targets == ["HfO2", "ZrO2"]
+
+
 def test_parse_query_detects_structured_advanced_search():
     plan = parse_user_query("Show materials containing Si and O with band gap between 0.5 and 1.0 eV")
 

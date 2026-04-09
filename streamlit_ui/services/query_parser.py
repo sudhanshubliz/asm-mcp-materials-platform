@@ -108,7 +108,11 @@ def parse_user_query(query: str) -> QueryPlan:
     lowered = normalized_query.lower()
 
     compare_targets = _extract_compare_targets(normalized_query)
-    if ("compare" in lowered or "vs" in lowered) and 2 <= len(compare_targets) <= 5:
+    if (
+        "compare" in lowered
+        or "comparison" in lowered
+        or "vs" in lowered
+    ) and 2 <= len(compare_targets) <= 5:
         return QueryPlan(
             intent="compare",
             original_query=normalized_query,
