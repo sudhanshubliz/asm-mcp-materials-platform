@@ -69,6 +69,18 @@ def apply_theme() -> None:
             padding: 1.2rem 0 1rem 0;
         }
 
+        .asm-hero-visual {
+            width: min(18rem, 100%);
+            margin-bottom: 0.9rem;
+        }
+
+        .asm-hero-visual svg {
+            display: block;
+            width: 100%;
+            height: auto;
+            filter: drop-shadow(0 18px 30px rgba(20, 33, 29, 0.08));
+        }
+
         .asm-kicker {
             color: var(--asm-warm);
             font-size: 0.82rem;
@@ -78,10 +90,11 @@ def apply_theme() -> None:
         }
 
         .asm-title {
-            font-size: 2.6rem;
-            line-height: 0.95;
+            font-size: clamp(1.45rem, 3.2vw, 2.6rem);
+            line-height: 1.02;
             margin: 0.25rem 0 0.8rem 0;
-            max-width: 12ch;
+            max-width: none;
+            white-space: nowrap;
         }
 
         .asm-subtitle {
@@ -198,7 +211,7 @@ def apply_theme() -> None:
             }
 
             .asm-title {
-                font-size: 2.2rem;
+                font-size: clamp(1.18rem, 4.3vw, 2rem);
             }
 
             .asm-subtitle {

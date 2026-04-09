@@ -134,6 +134,29 @@ def main() -> None:
         """
         <section class="asm-hero-shell">
             <div class="asm-hero">
+                <div class="asm-hero-visual" aria-hidden="true">
+                    <svg viewBox="0 0 320 180" role="img">
+                        <defs>
+                            <linearGradient id="asmOrb" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#0f8b6d" />
+                                <stop offset="100%" stop-color="#cc6b34" />
+                            </linearGradient>
+                            <linearGradient id="asmBeam" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="rgba(15,139,109,0.08)" />
+                                <stop offset="100%" stop-color="rgba(204,107,52,0.15)" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="22" y="26" width="276" height="128" rx="30" fill="rgba(255,255,255,0.72)" stroke="rgba(20,33,29,0.08)" />
+                        <path d="M70 118 L118 64 L164 102 L214 56 L256 94" fill="none" stroke="url(#asmBeam)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+                        <circle cx="70" cy="118" r="13" fill="#ffffff" stroke="#0f8b6d" stroke-width="6" />
+                        <circle cx="118" cy="64" r="15" fill="#ffffff" stroke="#cc6b34" stroke-width="6" />
+                        <circle cx="164" cy="102" r="12" fill="#ffffff" stroke="#0f8b6d" stroke-width="6" />
+                        <circle cx="214" cy="56" r="16" fill="#ffffff" stroke="#14211d" stroke-width="6" />
+                        <circle cx="256" cy="94" r="13" fill="#ffffff" stroke="#0f8b6d" stroke-width="6" />
+                        <circle cx="237" cy="126" r="30" fill="url(#asmOrb)" opacity="0.18" />
+                        <path d="M95 132 C132 105, 176 104, 222 132" fill="none" stroke="rgba(20,33,29,0.12)" stroke-width="4" stroke-linecap="round" />
+                    </svg>
+                </div>
                 <div class="asm-badge">Remote MCP workflow</div>
                 <div class="asm-kicker">ASM Materials Copilot</div>
                 <h1 class="asm-title">Chat with your Materials Project server.</h1>
