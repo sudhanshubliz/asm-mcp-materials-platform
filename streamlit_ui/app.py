@@ -44,6 +44,7 @@ def _run_prompt(prompt: str) -> None:
                     normalized,
                     show_raw_json=st.session_state.show_raw_json,
                     compact_mode=st.session_state.compact_mode,
+                    key_prefix=f"live-{len(st.session_state.messages)}",
                 )
                 st.session_state.messages.append(
                     {
@@ -62,13 +63,14 @@ def _run_prompt(prompt: str) -> None:
 
 
 def _render_chat_history() -> None:
-    for message in st.session_state.messages:
+    for index, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             if message["role"] == "assistant":
                 render_result(
                     message["content"],
                     show_raw_json=st.session_state.show_raw_json,
                     compact_mode=st.session_state.compact_mode,
+                    key_prefix=f"history-{index}",
                 )
             else:
                 st.markdown(message["content"])

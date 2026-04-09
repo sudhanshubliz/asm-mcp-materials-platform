@@ -14,7 +14,13 @@ def _render_metrics(metrics: dict[str, Any]) -> None:
         column.metric(label, value)
 
 
-def render_result(result: NormalizedResult, *, show_raw_json: bool, compact_mode: bool) -> None:
+def render_result(
+    result: NormalizedResult,
+    *,
+    show_raw_json: bool,
+    compact_mode: bool,
+    key_prefix: str,
+) -> None:
     st.markdown(f"#### {result.title}")
     st.caption(result.subtitle)
     if result.metrics:
@@ -32,6 +38,7 @@ def render_result(result: NormalizedResult, *, show_raw_json: bool, compact_mode
             data=records_to_csv(records),
             file_name="materials-results.csv",
             mime="text/csv",
+            key=f"{key_prefix}-download-csv",
             use_container_width=True,
         )
         download_columns[1].download_button(
@@ -39,6 +46,7 @@ def render_result(result: NormalizedResult, *, show_raw_json: bool, compact_mode
             data=records_to_json(records),
             file_name="materials-results.json",
             mime="application/json",
+            key=f"{key_prefix}-download-json",
             use_container_width=True,
         )
 

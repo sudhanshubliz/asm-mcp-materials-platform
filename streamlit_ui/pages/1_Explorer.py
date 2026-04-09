@@ -74,6 +74,7 @@ def main() -> None:
                 normalized,
                 show_raw_json=st.session_state.show_raw_json,
                 compact_mode=st.session_state.compact_mode,
+                key_prefix="explorer-result",
             )
         except MCPClientError as exc:
             st.error(str(exc))

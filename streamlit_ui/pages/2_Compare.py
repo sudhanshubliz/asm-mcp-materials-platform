@@ -45,6 +45,7 @@ def main() -> None:
             result,
             show_raw_json=st.session_state.show_raw_json,
             compact_mode=st.session_state.compact_mode,
+            key_prefix="compare-result",
         )
 
 
