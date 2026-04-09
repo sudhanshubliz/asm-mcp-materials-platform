@@ -76,10 +76,38 @@ def _render_chat_history() -> None:
                 st.markdown(message["content"])
 
 
+def _render_top_search() -> str | None:
+    if "top_search_query" not in st.session_state:
+        st.session_state.top_search_query = ""
+
+    queued_prompt = st.session_state.pending_prompt
+    if queued_prompt:
+        st.session_state.top_search_query = queued_prompt
+        st.session_state.pending_prompt = None
+
+    st.markdown('<div id="asm-sticky-search-anchor"></div>', unsafe_allow_html=True)
+    with st.form("asm-top-search-form", clear_on_submit=False, border=False):
+        st.text_input(
+            "Search materials",
+            key="top_search_query",
+            placeholder="Ask about formulas, mp-ids, band gaps, cathodes, alloys, or comparisons",
+            label_visibility="collapsed",
+        )
+        submitted = st.form_submit_button("Search", use_container_width=True)
+
+    if queued_prompt:
+        return queued_prompt
+    if submitted:
+        return st.session_state.top_search_query.strip()
+    return None
+
+
 def main() -> None:
     apply_theme()
     initialize_state(st.session_state)
     render_sidebar()
+
+    prompt = _render_top_search()
 
     st.markdown(
         """
@@ -98,11 +126,6 @@ def main() -> None:
     shell = st.container()
     with shell:
         _render_chat_history()
-
-        prompt = st.chat_input("Ask about formulas, mp-ids, band gaps, cathodes, alloys, or comparisons")
-        if st.session_state.pending_prompt and not prompt:
-            prompt = st.session_state.pending_prompt
-            st.session_state.pending_prompt = None
 
         if prompt:
             _run_prompt(prompt)

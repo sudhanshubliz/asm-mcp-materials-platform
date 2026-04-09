@@ -40,6 +40,10 @@ def apply_theme() -> None:
             color: var(--asm-ink);
         }
 
+        .block-container {
+            padding-top: 1.1rem;
+        }
+
         [data-testid="stSidebar"] {
             background: rgba(248, 249, 245, 0.92);
             border-right: 1px solid var(--asm-line);
@@ -64,7 +68,7 @@ def apply_theme() -> None:
         }
 
         .asm-hero {
-            padding: 1.2rem 0 1.2rem 0;
+            padding: 1.1rem 0 1.2rem 0;
         }
 
         .asm-kicker {
@@ -110,6 +114,50 @@ def apply_theme() -> None:
         .asm-caption {
             color: var(--asm-muted);
             font-size: 0.88rem;
+        }
+
+        div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] {
+            position: sticky;
+            top: 0.8rem;
+            z-index: 40;
+            padding-top: 0.15rem;
+            padding-bottom: 0.6rem;
+            background: linear-gradient(180deg, rgba(243, 245, 242, 0.98) 0%, rgba(243, 245, 242, 0.92) 78%, rgba(243, 245, 242, 0) 100%);
+        }
+
+        div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] [data-testid="stForm"] {
+            border: 1px solid var(--asm-line);
+            border-radius: 24px;
+            padding: 0.8rem 0.9rem 0.25rem;
+            background: rgba(255, 255, 255, 0.84);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 16px 36px rgba(20, 33, 29, 0.08);
+        }
+
+        div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] input {
+            border-radius: 16px !important;
+            border: 1px solid rgba(20, 33, 29, 0.12) !important;
+            background: rgba(247, 248, 245, 0.92) !important;
+            min-height: 3rem;
+        }
+
+        div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] button[kind="secondaryFormSubmit"] {
+            border-radius: 16px;
+            min-height: 3rem;
+            background: var(--asm-accent);
+            color: white;
+            border: none;
+            font-weight: 700;
+        }
+
+        @media (max-width: 900px) {
+            div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] {
+                top: 0.4rem;
+            }
+
+            .asm-title {
+                font-size: 2.2rem;
+            }
         }
         </style>
         """,
