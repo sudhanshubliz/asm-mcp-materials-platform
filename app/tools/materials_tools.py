@@ -3,9 +3,14 @@ from typing import Any
 
 from app.cache.redis_cache import get_cache, set_cache
 from app.config import config
-from app.models.schemas import MaterialByIdRequest, MaterialSearchRequest
+from app.models.schemas import AdvancedMaterialSearchRequest, MaterialByIdRequest, MaterialSearchRequest, NumericRange
 from app.services.exceptions import ExternalServiceError
-from app.services.materials_service import MATERIAL_OUTPUT_COLUMNS, get_material_by_id, search_material
+from app.services.materials_service import (
+    MATERIAL_OUTPUT_COLUMNS,
+    advanced_search_materials,
+    get_material_by_id,
+    search_material,
+)
 from app.services.oqmd_service import search_oqmd
 
 
@@ -46,7 +51,7 @@ def search_material_tool(formula: str, limit: int = 20, offset: int = 0) -> dict
     if errors:
         result["errors"] = errors
     else:
-        set_cache(cache_key, result)
+        set_cache(cache_key, result, ttl_seconds=config.CACHE_TTL_SECONDS)
 
     return result
 
@@ -61,8 +66,12 @@ _MP_ID_PATTERN = re.compile(r"\b(mp-[A-Za-z0-9-]+)\b")
 _FORMULA_PATTERN = re.compile(r"\b([A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)*)\b")
 
 _FIELD_ALIASES = {
+    "num elements": "num_elements",
+    "number of elements": "num_elements",
     "shear modulus vrh": "shear_modulus_vrh",
     "shear_modulus_vrh": "shear_modulus_vrh",
+    "bulk modulus vrh": "bulk_modulus_vrh",
+    "bulk_modulus_vrh": "bulk_modulus_vrh",
     "density": "density",
     "dens": "density",
     "weighted surface energy": "weighted_surface_energy",
@@ -75,6 +84,8 @@ _FIELD_ALIASES = {
     "band_gap": "band_gap",
     "volume": "volume",
     "vol": "volume",
+    "energy above hull": "energy_above_hull",
+    "energy_above_hull": "energy_above_hull",
     "shape factor": "shape_factor",
     "shape_factor": "shape_factor",
     "surface anisotropy": "surface_anisotropy",
@@ -91,6 +102,22 @@ _CRYSTAL_SYSTEMS = [
     "cubic",
 ]
 
+_COMMON_NAME_ALIASES = {
+    "silicon": "Si",
+    "gallium arsenide": "GaAs",
+    "titanium dioxide": "TiO2",
+    "iron oxide": "Fe2O3",
+    "lithium iron phosphate": "LiFePO4",
+}
+
+_NORMALIZED_ELEMENT_SYMBOLS = {element.lower(): element for element in {
+    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar",
+    "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr",
+    "Rb", "Sr", "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", "Sb", "Te", "I", "Xe",
+    "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu",
+    "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn",
+}}
+
 
 def _to_float(value: Any) -> float | None:
     if value is None:
@@ -102,9 +129,27 @@ def _to_float(value: Any) -> float | None:
 
 
 def _detect_formula(question: str) -> str | None:
+    lowered = question.lower()
+    for common_name, formula in _COMMON_NAME_ALIASES.items():
+        if common_name in lowered:
+            return formula
     explicit_material_match = re.search(r"\bmaterial\s+([A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)*)\b", question)
     formula_match = explicit_material_match or _FORMULA_PATTERN.search(question)
     return formula_match.group(1) if formula_match else None
+
+
+def _extract_elements(question: str) -> list[str]:
+    lowered = question.lower()
+    for marker in ("containing", "contains", "include", "including", "with elements", "with element"):
+        if marker not in lowered:
+            continue
+        fragment = question[lowered.index(marker) + len(marker) :]
+        fragment = re.split(r"\b(with|where|that|having|band gap|density|compare|between)\b", fragment, maxsplit=1)[0]
+        tokens = re.findall(r"\b([A-Za-z][a-z]?)\b", fragment)
+        elements = [_NORMALIZED_ELEMENT_SYMBOLS[token.lower()] for token in tokens if token.lower() in _NORMALIZED_ELEMENT_SYMBOLS]
+        if elements:
+            return list(dict.fromkeys(elements))
+    return []
 
 
 def _normalize_field(raw: str) -> str | None:
@@ -112,15 +157,16 @@ def _normalize_field(raw: str) -> str | None:
     return _FIELD_ALIASES.get(key)
 
 
-def _extract_filters(question: str) -> tuple[list[tuple[str, str, float]], list[str], bool | None]:
+def _extract_filters(question: str) -> tuple[list[tuple[str, str, float]], list[str], bool | None, bool | None]:
     q = question.lower()
     filters: list[tuple[str, str, float]] = []
     crystal_filters: list[str] = []
     predicted_stable: bool | None = None
+    is_metal: bool | None = None
 
     # Example: work function between 4.5 and 5.5
     for match in re.finditer(
-        r"(work function|work_function)\s*(?:between|from)\s*([0-9]*\.?[0-9]+)\s*(?:and|to)\s*([0-9]*\.?[0-9]+)",
+        r"(work function|work_function|band gap|band_gap|density|dens|volume|vol|energy above hull|energy_above_hull|shear modulus vrh|bulk modulus vrh|shape factor|surface anisotropy|weighted surface energy|num elements|number of elements)\s*(?:between|from)\s*([0-9]*\.?[0-9]+)\s*(?:and|to)\s*([0-9]*\.?[0-9]+)",
         q,
     ):
         field = _normalize_field(match.group(1))
@@ -130,7 +176,7 @@ def _extract_filters(question: str) -> tuple[list[tuple[str, str, float]], list[
 
     # Example: vol >200, dens <3, band gap >= 2
     for match in re.finditer(
-        r"(shear modulus vrh|density|dens|weighted surface energy|work function|band gap|volume|vol|shape factor|surface anisotropy)\s*(>=|<=|>|<|=)\s*([0-9]*\.?[0-9]+)",
+        r"(shear modulus vrh|bulk modulus vrh|density|dens|weighted surface energy|work function|band gap|volume|vol|shape factor|surface anisotropy|energy above hull|num elements|number of elements)\s*(>=|<=|>|<|=)\s*([0-9]*\.?[0-9]+)",
         q,
     ):
         field = _normalize_field(match.group(1))
@@ -142,7 +188,7 @@ def _extract_filters(question: str) -> tuple[list[tuple[str, str, float]], list[
 
     # Example: shear modulus vrh is above 80 and density is below 6
     for match in re.finditer(
-        r"(shear modulus vrh|density|dens|weighted surface energy|work function|band gap|volume|vol|shape factor|surface anisotropy)\s*(?:is\s*)?(above|below|greater than|less than)\s*([0-9]*\.?[0-9]+)",
+        r"(shear modulus vrh|bulk modulus vrh|density|dens|weighted surface energy|work function|band gap|volume|vol|shape factor|surface anisotropy|energy above hull|num elements|number of elements)\s*(?:is\s*)?(above|below|greater than|less than)\s*([0-9]*\.?[0-9]+)",
         q,
     ):
         field = _normalize_field(match.group(1))
@@ -162,11 +208,16 @@ def _extract_filters(question: str) -> tuple[list[tuple[str, str, float]], list[
     if "predicted_stable = false" in q or "predicted stable = false" in q or "predicted stable false" in q:
         predicted_stable = False
 
+    if "non-metal" in q or "non metal" in q:
+        is_metal = False
+    elif "metal" in q or "metallic" in q or "alloy" in q:
+        is_metal = True
+
     for cs in _CRYSTAL_SYSTEMS:
         if re.search(rf"\b{cs}\b", q):
             crystal_filters.append(cs)
 
-    return filters, crystal_filters, predicted_stable
+    return filters, crystal_filters, predicted_stable, is_metal
 
 
 def _match_filter(value: Any, op: str, expected: float) -> bool:
@@ -230,6 +281,173 @@ def _table_columns() -> list[str]:
     return columns
 
 
+def _upsert_range_field(payload: dict[str, Any], field_name: str, *, minimum: float | None = None, maximum: float | None = None) -> None:
+    current = payload.get(field_name, {})
+    if minimum is not None:
+        current["min"] = minimum if "min" not in current else max(current["min"], minimum)
+    if maximum is not None:
+        current["max"] = maximum if "max" not in current else min(current["max"], maximum)
+    if current:
+        payload[field_name] = current
+
+
+def _build_search_payload(question: str, limit: int, offset: int) -> tuple[dict[str, Any], list[str]]:
+    elements = _extract_elements(question)
+    formula = None if elements else _detect_formula(question)
+    numeric_filters, crystal_filters, predicted_stable, is_metal = _extract_filters(question)
+
+    payload: dict[str, Any] = {
+        "query": question,
+        "limit": limit,
+        "offset": offset,
+    }
+    heuristics: list[str] = []
+
+    if formula:
+        payload["formula"] = formula
+    if elements:
+        payload["elements"] = elements
+    if crystal_filters:
+        payload["crystal_system"] = crystal_filters[0]
+    if predicted_stable is not None:
+        payload["is_stable"] = predicted_stable
+    if is_metal is not None:
+        payload["is_metal"] = is_metal
+
+    for field, op, value in numeric_filters:
+        if op in {">", ">=", "between_min"}:
+            _upsert_range_field(payload, field, minimum=value)
+        elif op in {"<", "<=", "between_max"}:
+            _upsert_range_field(payload, field, maximum=value)
+        elif op == "=":
+            _upsert_range_field(payload, field, minimum=value, maximum=value)
+
+    q = question.lower()
+    if "lightweight" in q:
+        _upsert_range_field(payload, "density", maximum=5.0)
+        heuristics.append("Interpreted 'lightweight' as density <= 5 g/cm^3.")
+    if "alloy" in q or "alloys" in q:
+        payload["is_metal"] = True
+        _upsert_range_field(payload, "num_elements", minimum=2)
+        heuristics.append("Interpreted 'alloy' as metallic materials with at least two elements.")
+    if "aerospace" in q:
+        payload["is_stable"] = True if payload.get("is_stable") is None else payload["is_stable"]
+        _upsert_range_field(payload, "bulk_modulus_vrh", minimum=40.0)
+        _upsert_range_field(payload, "shear_modulus_vrh", minimum=20.0)
+        heuristics.append("Interpreted 'aerospace' as stable materials with lightweight and stiffness bias.")
+    if "cathode" in q and "battery" in q and not payload.get("elements"):
+        payload["elements"] = ["Li", "O"]
+        payload["is_stable"] = True if payload.get("is_stable") is None else payload["is_stable"]
+        _upsert_range_field(payload, "num_elements", minimum=2)
+        heuristics.append("Interpreted 'battery cathode' as stable Li-O containing multicomponent materials.")
+    if ("semiconductor" in q or "semiconductors" in q) and payload.get("is_metal") is None:
+        payload["is_metal"] = False
+        _upsert_range_field(payload, "band_gap", minimum=0.1, maximum=3.5)
+        heuristics.append("Interpreted 'semiconductor' as non-metallic materials with moderate band gap.")
+
+    return payload, heuristics
+
+
+def _as_request(payload: dict[str, Any]) -> AdvancedMaterialSearchRequest:
+    range_fields = {
+        "num_elements",
+        "band_gap",
+        "density",
+        "volume",
+        "energy_above_hull",
+        "bulk_modulus_vrh",
+        "shear_modulus_vrh",
+        "weighted_surface_energy",
+        "work_function",
+        "surface_anisotropy",
+        "shape_factor",
+    }
+    normalized = payload.copy()
+    for field_name in range_fields:
+        if field_name in normalized and isinstance(normalized[field_name], dict):
+            normalized[field_name] = NumericRange(**normalized[field_name])
+    return AdvancedMaterialSearchRequest(**normalized)
+
+
+def search_materials_advanced_tool(
+    query: str | None = None,
+    formula: str | None = None,
+    material_ids: list[str] | None = None,
+    elements: list[str] | None = None,
+    exclude_elements: list[str] | None = None,
+    crystal_system: str | None = None,
+    is_stable: bool | None = None,
+    is_metal: bool | None = None,
+    num_elements_min: float | None = None,
+    num_elements_max: float | None = None,
+    band_gap_min: float | None = None,
+    band_gap_max: float | None = None,
+    density_min: float | None = None,
+    density_max: float | None = None,
+    volume_min: float | None = None,
+    volume_max: float | None = None,
+    energy_above_hull_min: float | None = None,
+    energy_above_hull_max: float | None = None,
+    bulk_modulus_vrh_min: float | None = None,
+    bulk_modulus_vrh_max: float | None = None,
+    shear_modulus_vrh_min: float | None = None,
+    shear_modulus_vrh_max: float | None = None,
+    weighted_surface_energy_min: float | None = None,
+    weighted_surface_energy_max: float | None = None,
+    work_function_min: float | None = None,
+    work_function_max: float | None = None,
+    surface_anisotropy_min: float | None = None,
+    surface_anisotropy_max: float | None = None,
+    shape_factor_min: float | None = None,
+    shape_factor_max: float | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    payload: dict[str, Any] = {
+        "query": query,
+        "formula": formula,
+        "material_ids": material_ids or [],
+        "elements": elements or [],
+        "exclude_elements": exclude_elements or [],
+        "crystal_system": crystal_system,
+        "is_stable": is_stable,
+        "is_metal": is_metal,
+        "limit": limit,
+        "offset": offset,
+    }
+
+    range_inputs = {
+        "num_elements": (num_elements_min, num_elements_max),
+        "band_gap": (band_gap_min, band_gap_max),
+        "density": (density_min, density_max),
+        "volume": (volume_min, volume_max),
+        "energy_above_hull": (energy_above_hull_min, energy_above_hull_max),
+        "bulk_modulus_vrh": (bulk_modulus_vrh_min, bulk_modulus_vrh_max),
+        "shear_modulus_vrh": (shear_modulus_vrh_min, shear_modulus_vrh_max),
+        "weighted_surface_energy": (weighted_surface_energy_min, weighted_surface_energy_max),
+        "work_function": (work_function_min, work_function_max),
+        "surface_anisotropy": (surface_anisotropy_min, surface_anisotropy_max),
+        "shape_factor": (shape_factor_min, shape_factor_max),
+    }
+    for field_name, (minimum, maximum) in range_inputs.items():
+        if minimum is not None or maximum is not None:
+            payload[field_name] = {"min": minimum, "max": maximum}
+
+    request = _as_request({key: value for key, value in payload.items() if value not in (None, [], {})})
+    response = advanced_search_materials(request)
+    return {
+        "intent": "advanced_material_search",
+        "query": request.query,
+        "formula": request.formula,
+        "elements": request.elements,
+        "columns": _table_columns(),
+        "count": response["count"],
+        "total_source_rows": response.get("total_source_rows", response["count"]),
+        "data": response["data"],
+        "materials_project": response,
+    }
+
+
 def ask_materials_project_tool(question: str, limit: int = 20, offset: int = 0) -> dict:
     """
     Unified Materials Project tool.
@@ -256,52 +474,55 @@ def ask_materials_project_tool(question: str, limit: int = 20, offset: int = 0) 
             "columns": _table_columns(),
         }
 
-    formula = _detect_formula(question)
-    numeric_filters, crystal_filters, predicted_stable = _extract_filters(question)
+    request_payload, heuristics = _build_search_payload(question, limit, offset)
+    if not any(
+        (
+            request_payload.get("formula"),
+            request_payload.get("elements"),
+            request_payload.get("crystal_system"),
+            request_payload.get("is_stable") is not None,
+            request_payload.get("is_metal") is not None,
+            any(field in request_payload for field in _FIELD_ALIASES.values()),
+        )
+    ):
+        raise ExternalServiceError(
+            service="materials_project",
+            message="No material formula, material_id, elements, or supported filters found in question",
+            status_code=400,
+        )
 
-    fetch_limit = min(max((limit + offset) * 20, 200), 1000)
-    mp_payload = search_material(formula, fetch_limit, 0)
-    mp_rows = mp_payload.get("data", [])
-    filtered_rows = _apply_filters(mp_rows, numeric_filters, crystal_filters, predicted_stable)
-
-    paged_rows = filtered_rows[offset : offset + limit]
+    request = _as_request(request_payload)
+    mp_payload = advanced_search_materials(request)
+    paged_rows = mp_payload.get("data", [])
 
     oqmd_payload = None
     oqmd_errors = []
-    if config.OQMD_REQUIRED and formula:
+    if config.OQMD_REQUIRED and request.formula:
         try:
-            oqmd_payload = search_oqmd(formula, limit, offset)
+            oqmd_payload = search_oqmd(request.formula, limit, offset)
         except ExternalServiceError as exc:
             oqmd_errors.append(exc.to_dict())
 
     response = {
-        "intent": "material_search_federated",
+        "intent": "material_search_federated" if request.formula else "advanced_material_search",
         "question": question,
-        "formula": formula,
-        "applied_filters": {
-            "numeric": [{"field": f, "op": op, "value": v} for f, op, v in numeric_filters],
-            "crystal_system": crystal_filters,
-            "predicted_stable": predicted_stable,
-        },
+        "formula": request.formula,
+        "elements": request.elements,
+        "applied_filters": request.model_dump(exclude_none=True),
+        "heuristics": heuristics,
         "columns": _table_columns(),
-        "total_source_rows": len(mp_rows),
+        "total_source_rows": mp_payload.get("total_source_rows", len(paged_rows)),
         "count": len(paged_rows),
         "data": paged_rows,
         "materials_project": {
             "count": len(paged_rows),
             "data": paged_rows,
+            "query": mp_payload.get("query", request.model_dump(exclude_none=True)),
         },
         "oqmd": oqmd_payload,
     }
 
     if oqmd_errors:
         response["errors"] = oqmd_errors
-
-    if not paged_rows and not numeric_filters and not crystal_filters and predicted_stable is None:
-        raise ExternalServiceError(
-            service="materials_project",
-            message="No material formula or material_id found in question",
-            status_code=400,
-        )
 
     return response

@@ -1,9 +1,11 @@
-fastmcp
 fastapi
+fastmcp>=3.1.0
 uvicorn
 sqlalchemy
 pyodbc
 requests
+httpx
+cachetools
 mp-api
 pydantic
 redis

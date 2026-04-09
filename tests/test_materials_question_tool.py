@@ -16,8 +16,8 @@ def test_ask_materials_project_routes_by_material_id():
 
 def test_ask_materials_project_routes_by_formula():
     with patch(
-        "app.tools.materials_tools.search_material",
-        return_value={"count": 1, "data": [{"material_id": "mp-1", "crystal_system": "cubic"}]},
+        "app.tools.materials_tools.advanced_search_materials",
+        return_value={"count": 1, "total_source_rows": 1, "data": [{"material_id": "mp-1", "crystal_system": "cubic"}]},
     ), patch("app.tools.materials_tools.search_oqmd", return_value={"count": 0, "data": []}):
         result = ask_materials_project_tool("Find details for Fe2O3", limit=5, offset=0)
 
@@ -28,8 +28,8 @@ def test_ask_materials_project_routes_by_formula():
 
 def test_ask_materials_project_routes_single_element_formula():
     with patch(
-        "app.tools.materials_tools.search_material",
-        return_value={"count": 1, "data": [{"material_id": "mp-2", "crystal_system": "hexagonal"}]},
+        "app.tools.materials_tools.advanced_search_materials",
+        return_value={"count": 1, "total_source_rows": 1, "data": [{"material_id": "mp-2", "crystal_system": "hexagonal"}]},
     ), patch("app.tools.materials_tools.search_oqmd", return_value={"count": 0, "data": []}):
         result = ask_materials_project_tool(
             "Retrieve full structural and electronic properties for material Dy",
@@ -41,36 +41,49 @@ def test_ask_materials_project_routes_single_element_formula():
     assert result["formula"] == "Dy"
 
 
-def test_ask_materials_project_filters_work_function_range():
-    rows = [
-        {"material_id": "mp-a", "work_function": 4.2, "crystal_system": "cubic"},
-        {"material_id": "mp-b", "work_function": 4.8, "crystal_system": "cubic"},
-        {"material_id": "mp-c", "work_function": 5.4, "crystal_system": "hexagonal"},
-        {"material_id": "mp-d", "work_function": 5.8, "crystal_system": "hexagonal"},
-    ]
-    with patch("app.tools.materials_tools.search_material", return_value={"count": 4, "data": rows}):
-        result = ask_materials_project_tool("Find materials with work function between 4.5 and 5.5", limit=10)
-
-    returned_ids = {row["material_id"] for row in result["data"]}
-    assert returned_ids == {"mp-b", "mp-c"}
-
-
-def test_ask_materials_project_filters_crystal_and_numeric():
-    rows = [
-        {"material_id": "mp-a", "crystal_system": "cubic", "shear_modulus_vrh": 90.0, "density": 5.0},
-        {"material_id": "mp-b", "crystal_system": "cubic", "shear_modulus_vrh": 70.0, "density": 5.0},
-        {"material_id": "mp-c", "crystal_system": "hexagonal", "shear_modulus_vrh": 95.0, "density": 6.5},
-    ]
-    with patch("app.tools.materials_tools.search_material", return_value={"count": 3, "data": rows}):
+def test_ask_materials_project_supports_elements_and_band_gap():
+    with patch(
+        "app.tools.materials_tools.advanced_search_materials",
+        return_value={"count": 1, "total_source_rows": 1, "data": [{"material_id": "mp-149", "crystal_system": "cubic"}]},
+    ):
         result = ask_materials_project_tool(
-            "Pull materials where shear modulus VRH is above 80 and density is below 6 and cubic",
+            "Show materials containing Si and O with band gap between 0.5 and 1.0 eV",
             limit=10,
         )
 
-    assert [row["material_id"] for row in result["data"]] == ["mp-a"]
+    assert result["intent"] == "advanced_material_search"
+    assert result["elements"] == ["Si", "O"]
+    assert result["applied_filters"]["band_gap"]["min"] == 0.5
+    assert result["applied_filters"]["band_gap"]["max"] == 1.0
+
+
+def test_ask_materials_project_supports_lowercase_elements():
+    with patch(
+        "app.tools.materials_tools.advanced_search_materials",
+        return_value={"count": 1, "total_source_rows": 1, "data": [{"material_id": "mp-149", "crystal_system": "cubic"}]},
+    ):
+        result = ask_materials_project_tool(
+            "show materials containing si and o with band gap between 0.5 and 1.0 eV",
+            limit=10,
+        )
+
+    assert result["elements"] == ["Si", "O"]
+
+
+def test_ask_materials_project_applies_lightweight_alloy_heuristics():
+    with patch(
+        "app.tools.materials_tools.advanced_search_materials",
+        return_value={"count": 1, "total_source_rows": 1, "data": [{"material_id": "mp-42", "crystal_system": "hexagonal"}]},
+    ):
+        result = ask_materials_project_tool("Find lightweight alloys used in aerospace engineering", limit=10)
+
+    assert result["intent"] == "advanced_material_search"
+    assert result["applied_filters"]["is_metal"] is True
+    assert result["applied_filters"]["density"]["max"] == 5.0
+    assert result["applied_filters"]["num_elements"]["min"] == 2
+    assert result["heuristics"]
 
 
 def test_ask_materials_project_rejects_unparsable_question():
-    with patch("app.tools.materials_tools.search_material", return_value={"count": 0, "data": []}):
-        with pytest.raises(ExternalServiceError):
-            ask_materials_project_tool("Tell me something interesting")
+    with pytest.raises(ExternalServiceError):
+        ask_materials_project_tool("Tell me something interesting")

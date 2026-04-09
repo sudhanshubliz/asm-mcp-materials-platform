@@ -2,6 +2,7 @@ import requests
 
 from app.config import config
 from app.services.exceptions import ExternalServiceError
+from app.services.http_client import build_retrying_session
 
 
 def search_oqmd(composition: str, limit: int = 20, offset: int = 0) -> dict:
@@ -12,8 +13,9 @@ def search_oqmd(composition: str, limit: int = 20, offset: int = 0) -> dict:
         "offset": offset,
         "format": "json",
     }
+    session = build_retrying_session()
     try:
-        response = requests.get(url, params=params, timeout=config.REQUEST_TIMEOUT)
+        response = session.get(url, params=params, timeout=config.REQUEST_TIMEOUT)
         response.raise_for_status()
         payload = response.json()
         data = payload.get("data") if isinstance(payload, dict) else payload

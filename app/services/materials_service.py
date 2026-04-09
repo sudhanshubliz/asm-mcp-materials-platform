@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+from typing import Any
+
 from app.config import config
+from app.models.schemas import AdvancedMaterialSearchRequest, NumericRange
 from app.services.exceptions import ExternalServiceError
+from app.services.http_client import build_retrying_session
 
 
 MATERIAL_OUTPUT_COLUMNS = [
@@ -136,6 +142,85 @@ def _summary_fields() -> list[str]:
     ]
 
 
+_ADVANCED_QUERY_PARAM_MAP = {
+    "num_elements": "num_elements",
+    "band_gap": "band_gap",
+    "density": "density",
+    "volume": "volume",
+    "energy_above_hull": "energy_above_hull",
+    "bulk_modulus_vrh": "k_vrh",
+    "shear_modulus_vrh": "g_vrh",
+    "weighted_surface_energy": "weighted_surface_energy",
+    "work_function": "weighted_work_function",
+    "surface_anisotropy": "surface_energy_anisotropy",
+    "shape_factor": "shape_factor",
+}
+
+
+def _range_to_tuple(range_filter: NumericRange | None) -> tuple[float, float] | None:
+    if range_filter is None:
+        return None
+    lower = range_filter.min if range_filter.min is not None else -1_000_000_000.0
+    upper = range_filter.max if range_filter.max is not None else 1_000_000_000.0
+    return lower, upper
+
+
+def _search_material_mp_api(criteria: AdvancedMaterialSearchRequest) -> dict:
+    try:
+        from mp_api.client import MPRester
+
+        fetch_limit = min(max((criteria.limit + criteria.offset) * 4, 200), 1000)
+        kwargs: dict[str, Any] = {
+            "num_chunks": 1,
+            "chunk_size": fetch_limit,
+            "fields": _summary_fields(),
+        }
+
+        if criteria.formula:
+            kwargs["formula"] = criteria.formula
+        if criteria.material_ids:
+            kwargs["material_ids"] = criteria.material_ids
+        if criteria.elements:
+            kwargs["elements"] = criteria.elements
+        if criteria.exclude_elements:
+            kwargs["exclude_elements"] = criteria.exclude_elements
+        if criteria.crystal_system:
+            kwargs["crystal_system"] = criteria.crystal_system
+        if criteria.is_stable is not None:
+            kwargs["is_stable"] = criteria.is_stable
+        if criteria.is_metal is not None:
+            kwargs["is_metal"] = criteria.is_metal
+
+        for field_name, mp_param in _ADVANCED_QUERY_PARAM_MAP.items():
+            range_tuple = _range_to_tuple(getattr(criteria, field_name))
+            if range_tuple is not None:
+                kwargs[mp_param] = range_tuple
+
+        with MPRester(config.MATERIALS_API_KEY) as mpr:
+            docs = mpr.materials.summary.search(**kwargs)
+
+        cleaned_docs = [_clean_doc(doc) for doc in docs]
+        paged_docs = cleaned_docs[criteria.offset : criteria.offset + criteria.limit]
+        return {
+            "count": len(paged_docs),
+            "total_source_rows": len(cleaned_docs),
+            "data": paged_docs,
+            "query": criteria.model_dump(exclude_none=True),
+        }
+    except ImportError as exc:
+        raise ExternalServiceError(
+            service="materials_project",
+            message="mp-api package is not installed. Run: pip install mp-api",
+            status_code=500,
+        ) from exc
+    except Exception as exc:
+        raise ExternalServiceError(
+            service="materials_project",
+            message=f"Materials Project request failed: {exc}",
+            status_code=403 if "403" in str(exc) else 502,
+        ) from exc
+
+
 def search_material(formula: str | None, limit: int = 20, offset: int = 0) -> dict:
     _ensure_api_key()
 
@@ -153,37 +238,35 @@ def search_material(formula: str | None, limit: int = 20, offset: int = 0) -> di
             status_code=400,
         )
 
-    # Fallback to official mp-api client when REST is blocked by provider policy.
-    try:
-        from mp_api.client import MPRester
+    return _search_material_mp_api(
+        AdvancedMaterialSearchRequest(
+            formula=formula,
+            query=formula or "all_materials",
+            limit=limit,
+            offset=offset,
+        )
+    )
 
-        with MPRester(config.MATERIALS_API_KEY) as mpr:
-            kwargs = {
-                "num_chunks": 1,
-                "chunk_size": max(1, min(limit, 100)),
-                "fields": _summary_fields(),
-            }
-            if formula:
-                kwargs["formula"] = formula
-            docs = mpr.materials.summary.search(**kwargs)
 
-        sliced = docs[offset : offset + limit] if offset > 0 else docs[:limit]
-        cleaned_docs = [_clean_doc(doc) for doc in sliced]
+def advanced_search_materials(criteria: AdvancedMaterialSearchRequest) -> dict:
+    _ensure_api_key()
 
-        return {"count": len(cleaned_docs), "data": cleaned_docs}
-    except ImportError as exc:
-        raise ExternalServiceError(
-            service="materials_project",
-            message="mp-api package is not installed. Run: pip install mp-api",
-            status_code=500,
-        ) from exc
-    except Exception as exc:
-        # mp-api wraps HTTP/auth errors; surface detail to caller.
-        raise ExternalServiceError(
-            service="materials_project",
-            message=f"Materials Project request failed: {exc}",
-            status_code=403 if "403" in str(exc) else 502,
-        ) from exc
+    # Simple formula-only searches can still take advantage of the REST path.
+    if (
+        criteria.formula
+        and not criteria.material_ids
+        and not criteria.elements
+        and not criteria.exclude_elements
+        and criteria.crystal_system is None
+        and criteria.is_stable is None
+        and criteria.is_metal is None
+        and not any(getattr(criteria, field) for field in _ADVANCED_QUERY_PARAM_MAP)
+    ):
+        result = search_material(criteria.formula, criteria.limit, criteria.offset)
+        result["query"] = criteria.model_dump(exclude_none=True)
+        return result
+
+    return _search_material_mp_api(criteria)
 
 
 def _search_material_rest(formula: str | None, limit: int, offset: int) -> dict:
@@ -202,8 +285,10 @@ def _search_material_rest(formula: str | None, limit: int, offset: int) -> dict:
     if formula:
         params["formula"] = formula
 
+    session = build_retrying_session()
+
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=config.REQUEST_TIMEOUT)
+        response = session.get(url, headers=headers, params=params, timeout=config.REQUEST_TIMEOUT)
         response.raise_for_status()
         payload = response.json()
     except requests.HTTPError as exc:
