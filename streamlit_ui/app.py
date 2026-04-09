@@ -107,19 +107,16 @@ def _render_top_search() -> str | None:
         ("Battery cathodes", SAMPLE_PROMPTS[3]),
         ("mp-149 lookup", SAMPLE_PROMPTS[4]),
     ]
-    clicked_prompt: str | None = None
     action_columns = st.columns(len(quick_actions))
     for column, (label, full_prompt) in zip(action_columns, quick_actions, strict=False):
         with column:
             if st.button(label, key=f"hero-prompt::{label}", use_container_width=True):
-                st.session_state.top_search_query = full_prompt
+                st.session_state.pending_prompt = full_prompt
                 save_query(st.session_state, full_prompt)
-                clicked_prompt = full_prompt
+                st.rerun()
 
     if queued_prompt:
         return queued_prompt
-    if clicked_prompt:
-        return clicked_prompt
     if submitted:
         return st.session_state.top_search_query.strip()
     return None
