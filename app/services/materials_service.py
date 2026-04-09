@@ -319,8 +319,73 @@ def _search_material_rest(formula: str | None, limit: int, offset: int) -> dict:
     return {"count": len(cleaned_docs), "data": cleaned_docs}
 
 
+def _get_material_by_id_rest(material_id: str) -> dict:
+    try:
+        import requests
+    except ImportError as exc:
+        raise ExternalServiceError(
+            service="materials_project",
+            message="requests package is not installed",
+            status_code=500,
+        ) from exc
+
+    url = f"{config.MATERIALS_API.rstrip('/')}{config.MATERIALS_SUMMARY_PATH}"
+    headers = {config.MATERIALS_API_KEY_HEADER: config.MATERIALS_API_KEY}
+    params = {
+        "material_ids": material_id,
+        "limit": 1,
+        "skip": 0,
+    }
+
+    session = build_retrying_session()
+
+    try:
+        response = session.get(url, headers=headers, params=params, timeout=config.REQUEST_TIMEOUT)
+        response.raise_for_status()
+        payload = response.json()
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 502
+        detail = exc.response.text if exc.response is not None else str(exc)
+        raise ExternalServiceError(
+            service="materials_project",
+            message=f"Materials Project REST lookup failed ({status}): {detail[:300]}",
+            status_code=status if status in {400, 401, 403, 404, 429} else 502,
+        ) from exc
+    except requests.RequestException as exc:
+        raise ExternalServiceError(
+            service="materials_project",
+            message=f"Materials Project REST lookup network error: {exc}",
+            status_code=502,
+        ) from exc
+
+    rows = []
+    if isinstance(payload, dict):
+        if isinstance(payload.get("data"), list):
+            rows = payload["data"]
+        elif isinstance(payload.get("results"), list):
+            rows = payload["results"]
+    elif isinstance(payload, list):
+        rows = payload
+
+    cleaned_docs = [_normalize_output(doc if isinstance(doc, dict) else {}) for doc in rows]
+    if not cleaned_docs:
+        raise ExternalServiceError(
+            service="materials_project",
+            message=f"Material not found: {material_id}",
+            status_code=404,
+        )
+    return cleaned_docs[0]
+
+
 def get_material_by_id(material_id: str) -> dict:
     _ensure_api_key()
+
+    if config.MATERIALS_API_MODE in {"auto", "rest"}:
+        try:
+            return _get_material_by_id_rest(material_id)
+        except ExternalServiceError:
+            if config.MATERIALS_API_MODE == "rest":
+                raise
 
     try:
         from mp_api.client import MPRester
