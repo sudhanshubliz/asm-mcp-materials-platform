@@ -2,43 +2,76 @@
 
 Production-ready two-part application for Materials Project workflows:
 
-- `app/`: the MCP server and HTTP API layer
-- `streamlit_ui/`: the Streamlit chat and dashboard UI
+- an MCP server in `app/`
+- a Streamlit client in `streamlit_ui/`
 
-The key design rule in this repo is:
+The backend stays the integration layer to Materials Project. The Streamlit app talks to that backend over a remote MCP HTTP endpoint and does not use a local desktop `mcp.json`.
 
-- the MCP server is the integration boundary to Materials Project
-- the Streamlit app is a remote MCP client
-- the Streamlit app does **not** use local `mcp.json` or Claude-style desktop MCP config
+## Live Deployments
 
-## What This Repo Contains
+Current hosted endpoints:
 
-```text
-app/                         MCP server + FastAPI app
-streamlit_ui/                Streamlit UI that calls MCP over HTTP
-tests/                       Unit tests
-render.yaml                  Render deployment config
-requirements.txt             Full local/server dependency set
-requirements-render.txt      Lean Render dependency set
-requirements-streamlit.txt   Streamlit dependency set
-.env.example                 Local env template
-```
+- Render MCP server: [https://asm-mcp-materials-platform.onrender.com](https://asm-mcp-materials-platform.onrender.com)
+- MCP endpoint: [https://asm-mcp-materials-platform.onrender.com/mcp](https://asm-mcp-materials-platform.onrender.com/mcp)
+- Health: [https://asm-mcp-materials-platform.onrender.com/health](https://asm-mcp-materials-platform.onrender.com/health)
+- MCP metadata: [https://asm-mcp-materials-platform.onrender.com/.well-known/mcp.json](https://asm-mcp-materials-platform.onrender.com/.well-known/mcp.json)
+- Streamlit app: [https://asm-mcp-materials-platform.streamlit.app](https://asm-mcp-materials-platform.streamlit.app)
+
+## What This Repo Does
+
+- exposes Materials Project data through reusable MCP tools
+- serves MCP over HTTP at `/mcp`
+- provides a Streamlit chat UI for search, lookup, comparison, and export
+- supports separate deployment for backend and frontend
+- keeps configuration environment-variable based only
+- includes caching, retries, normalized schemas, and tests
 
 ## Architecture
 
 ```text
-User -> Streamlit UI -> Remote MCP endpoint (/mcp) -> MCP tools -> Materials Project API
+User
+  -> Streamlit UI
+  -> MCP client over HTTP
+  -> Render or local MCP server (/mcp)
+  -> MCP tools
+  -> Materials Project API
 ```
 
-There are two ways to run the MCP server:
+Important design rules in this repo:
 
-1. Local MCP server
-   Use this during development when Streamlit runs on your machine and talks to `http://localhost:8000/mcp`
+- the MCP server is the only integration boundary to Materials Project
+- the Streamlit app is a remote MCP client
+- the Streamlit app must use `MCP_SERVER_URL`
+- the Streamlit app must not depend on Claude Desktop or `mcp.json`
 
-2. Remote MCP server on Render
-   Use this for hosted Streamlit, shared demos, and production-style deployments
+## Repository Layout
 
-## Core MCP Tools
+```text
+app/                         FastAPI app + FastMCP server + MCP tools
+streamlit_ui/                Streamlit app, pages, services, utilities
+tests/                       Unit tests for client, parsing, normalization
+render.yaml                  Render deployment config
+requirements.txt             Full local development dependencies
+requirements-render.txt      Lean backend dependency set for Render
+requirements-streamlit.txt   Streamlit dependency set
+streamlit_ui/requirements.txt  Streamlit Cloud entry requirements file
+.env.example                 Environment template
+```
+
+## MCP Server Features
+
+- HTTP MCP endpoint at `/mcp`
+- health check at `/health`
+- discovery metadata at `/.well-known/mcp.json`
+- FastAPI REST helpers under `/api/...`
+- structured logging
+- graceful error envelopes
+- retries for upstream HTTP requests
+- normalized material result schema
+- cache support
+- environment-only configuration
+
+Core MCP tools:
 
 - `search_material_tool`
 - `search_materials_advanced_tool`
@@ -49,142 +82,119 @@ There are two ways to run the MCP server:
 
 ## Streamlit UI Features
 
-- chat-style assistant for natural language materials queries
-- direct formula lookup like `Fe2O3`, `TiO2`, `LiFePO4`
-- direct mp-id lookup like `mp-149`
-- structured explorer filters
-- compare view for 2 to 5 materials
-- saved queries and recent searches
-- MCP connection health/debug page
+- chat-style materials assistant
+- natural-language search
+- formula lookup like `Fe2O3`, `LiFePO4`, `TiO2`
+- mp-id lookup like `mp-149`
+- element and property range filtering
+- compare flow for 2 to 5 materials
 - CSV and JSON export
+- recent searches and saved queries
+- connection status and debug page
+- remote MCP health awareness
 
-## MCP Server Features
+## Local vs Remote MCP
 
-- clean HTTP MCP endpoint at `/mcp`
-- health endpoint at `/health`
-- discovery metadata at `/.well-known/mcp.json`
-- structured logging
-- retry-aware upstream calls
-- normalized materials schemas
-- environment-variable based configuration only
-
-## Local Vs Remote MCP Server
+There are two valid development modes.
 
 ### Local MCP server
 
-Use local mode when:
+Use this when you are changing backend code or testing locally.
 
-- you are developing the backend
-- you want Streamlit to talk to `localhost`
-- you want to test changes before pushing to GitHub
+Endpoints:
 
-Local MCP endpoint:
-
-```text
-http://localhost:8000/mcp
-```
-
-Health endpoint:
-
-```text
-http://localhost:8000/health
-```
+- `http://localhost:8000/mcp`
+- `http://localhost:8000/health`
+- `http://localhost:8000/.well-known/mcp.json`
 
 ### Remote MCP server on Render
 
-Use remote mode when:
+Use this when:
 
-- you want a hosted MCP endpoint
-- Streamlit Community Cloud needs a public MCP URL
-- you want the UI and backend deployed separately
+- Streamlit Community Cloud needs a public MCP endpoint
+- you want a stable hosted demo
+- frontend and backend should deploy independently
 
-Remote MCP endpoint example:
+Example:
 
-```text
-https://your-render-service.onrender.com/mcp
-```
+- `https://your-render-service.onrender.com/mcp`
 
-Health endpoint example:
+Current deployment:
 
-```text
-https://your-render-service.onrender.com/health
-```
-
-Discovery metadata example:
-
-```text
-https://your-render-service.onrender.com/.well-known/mcp.json
-```
+- `https://asm-mcp-materials-platform.onrender.com/mcp`
 
 ## Environment Variables
 
-Copy the example first:
+Copy the template first:
 
 ```bash
 cp .env.example .env
 ```
 
-Important variables:
+Included template:
 
 ```env
 MATERIALS_API_KEY=
 MATERIALS_API=https://next-gen.materialsproject.org/api
+MATERIALS_SUMMARY_PATH=/materials/summary
+MATERIALS_API_KEY_HEADER=X-API-KEY
+MATERIALS_API_MODE=auto
 OQMD_REQUIRED=false
 MCP_REQUIRE_AUTH=false
 MCP_SERVER_URL=http://localhost:8000/mcp
+
+# Optional
+OQMD_API=https://oqmd.org/api
+OQMD_RESOURCE=formationenergy
+SQL_CONNECTION=sqlite+pysqlite:///:memory:
+MCP_TRANSPORT=http
+MCP_HOST=0.0.0.0
+MCP_PORT=8000
+LOG_LEVEL=INFO
+REQUEST_TIMEOUT=30
+REQUEST_RETRY_ATTEMPTS=3
+REQUEST_RETRY_BACKOFF=0.5
+CACHE_TTL_SECONDS=3600
 ```
 
-### MCP server env vars
+### Required backend variables
 
 - `MATERIALS_API_KEY`
-  Required for Materials Project access
 - `MATERIALS_API`
-  Materials Project base API URL
-- `MATERIALS_SUMMARY_PATH`
-  Summary endpoint path for REST mode
-- `MATERIALS_API_KEY_HEADER`
-  Header used for the Materials Project key
 - `MATERIALS_API_MODE`
-  `auto`, `rest`, or `mp_api`
 - `MCP_TRANSPORT`
-  `stdio` or `http`
 - `MCP_HOST`
-  bind host for HTTP mode
 - `MCP_PORT`
-  bind port for HTTP mode
-- `MCP_REQUIRE_AUTH`
-  enable auth checks if needed
-- `OQMD_REQUIRED`
-  turn OQMD federation on or off
-- `SQL_CONNECTION`
-  SQL backend connection string
-- `LOG_LEVEL`
-  server logging level
-- `REQUEST_TIMEOUT`
-  upstream HTTP timeout in seconds
-- `REQUEST_RETRY_ATTEMPTS`
-  retry count for upstream HTTP calls
-- `REQUEST_RETRY_BACKOFF`
-  retry backoff factor
-- `CACHE_TTL_SECONDS`
-  cache TTL in seconds
 
-### Streamlit UI env vars
+### Common backend variables
+
+- `MATERIALS_SUMMARY_PATH`
+- `MATERIALS_API_KEY_HEADER`
+- `MCP_REQUIRE_AUTH`
+- `MCP_PUBLISH_METADATA`
+- `OQMD_REQUIRED`
+- `SQL_CONNECTION`
+- `LOG_LEVEL`
+- `REQUEST_TIMEOUT`
+- `REQUEST_RETRY_ATTEMPTS`
+- `REQUEST_RETRY_BACKOFF`
+- `CACHE_TTL_SECONDS`
+- `CORS_ALLOWED_ORIGINS`
+
+### Streamlit variables
 
 - `MCP_SERVER_URL`
-  The remote MCP endpoint the UI should call
-- `MCP_AUTH_TOKEN`
-  Optional bearer token if your MCP server is protected
+- `MCP_AUTH_TOKEN` if auth is enabled on the MCP server
 
 Important:
 
-- Streamlit uses `MCP_SERVER_URL`
-- Streamlit does **not** use `mcp.json`
-- Streamlit Community Cloud should use secrets or env vars, not local desktop MCP config
+- Streamlit reads `MCP_SERVER_URL`
+- Streamlit does not read `mcp.json`
+- Streamlit Community Cloud should use Secrets, not local desktop MCP config
 
-## Run Locally
+## Install Dependencies
 
-### 1. Create and activate a virtual environment
+Create a virtual environment:
 
 ```bash
 python3 -m venv .venv
@@ -192,16 +202,16 @@ source .venv/bin/activate
 pip install --upgrade pip
 ```
 
-### 2. Install local dependencies
-
-For full local development:
+Install all local development dependencies:
 
 ```bash
 pip install -r requirements.txt
 pip install -r requirements-streamlit.txt
 ```
 
-### 3. Run the MCP server locally over HTTP
+## Run Locally
+
+### 1. Start the MCP server
 
 ```bash
 export MCP_TRANSPORT=http
@@ -210,81 +220,108 @@ export MCP_PORT=8000
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Local MCP server URLs:
+Local backend URLs:
 
-- `http://localhost:8000/health`
-- `http://localhost:8000/mcp`
-- `http://localhost:8000/.well-known/mcp.json`
-- `http://localhost:8000/docs`
+- [http://localhost:8000](http://localhost:8000)
+- [http://localhost:8000/health](http://localhost:8000/health)
+- [http://localhost:8000/.well-known/mcp.json](http://localhost:8000/.well-known/mcp.json)
+- [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 4. Run the Streamlit UI against the local MCP server
+### 2. Start Streamlit against local MCP
 
 ```bash
 export MCP_SERVER_URL=http://localhost:8000/mcp
 streamlit run streamlit_ui/app.py
 ```
 
-This is the recommended local developer workflow:
+### 3. Start Streamlit against Render MCP
 
-1. run the MCP server locally
-2. run Streamlit locally
-3. verify the UI is calling `localhost`
-4. deploy the MCP server to Render
-5. switch `MCP_SERVER_URL` to the Render URL
-6. deploy Streamlit separately
+```bash
+export MCP_SERVER_URL=https://asm-mcp-materials-platform.onrender.com/mcp
+streamlit run streamlit_ui/app.py
+```
+
+Recommended local workflow:
+
+1. Run the MCP server locally.
+2. Run Streamlit locally.
+3. Test against `localhost`.
+4. Deploy the backend to Render.
+5. Point `MCP_SERVER_URL` to the Render URL.
+6. Deploy Streamlit separately.
 
 ## Streamlit Remote MCP Integration
 
-The Streamlit app is built to call a remote MCP endpoint directly:
+The Streamlit app uses `streamlit_ui/services/mcp_client.py` to talk to MCP over HTTP.
 
-- it reads `MCP_SERVER_URL`
-- it connects to the MCP server over HTTP
-- it lists tools and calls tools remotely
-- it normalizes tool responses before rendering
+It supports:
 
-### Local Streamlit -> Local MCP
+- `MCP_SERVER_URL` via env var or Streamlit secret
+- health probing
+- retries
+- timeout handling
+- cached repeated tool calls
+- response normalization before rendering
 
-```env
-MCP_SERVER_URL=http://localhost:8000/mcp
-```
+Default behavior:
 
-### Local Streamlit -> Remote Render MCP
+- use `MCP_SERVER_URL` if set
+- otherwise probe local MCP
+- otherwise fall back to the hosted Render MCP endpoint
 
-```env
-MCP_SERVER_URL=https://your-render-service.onrender.com/mcp
-```
+### Streamlit Community Cloud configuration
 
-### Streamlit Community Cloud -> Remote Render MCP
+Repository settings:
 
-Use Streamlit secrets:
+- repo: `sudhanshubliz/asm-mcp-materials-platform`
+- branch: `main`
+- main file path: `streamlit_ui/app.py`
+
+Streamlit Cloud installs:
+
+- `streamlit_ui/requirements.txt`
+
+That file points to:
+
+- `requirements-streamlit.txt`
+
+Add these secrets in Streamlit Cloud:
 
 ```toml
-MCP_SERVER_URL = "https://your-render-service.onrender.com/mcp"
+MCP_SERVER_URL = "https://asm-mcp-materials-platform.onrender.com/mcp"
 ```
 
 Optional:
 
 ```toml
-MCP_AUTH_TOKEN = "your-token-if-enabled"
+MCP_AUTH_TOKEN = "your-token"
 ```
 
-## Deploy MCP Server To Render
+## Deploy MCP Server to Render
 
-This repo includes both:
+This repo includes a Render-ready config:
 
 - `render.yaml`
-- a lean Docker path via `Dockerfile` + `requirements-render.txt`
+- lean backend dependencies in `requirements-render.txt`
 
-The Render deployment is intentionally slimmed down so the server does not install heavy optional local-only UI or ML dependencies unless required.
+Why a separate Render requirements file exists:
 
-### Recommended Render setup
+- to keep deployment memory lower
+- to avoid installing Streamlit-only packages
+- to avoid pulling heavier optional local packages unless the backend needs them
 
-1. Create a Render Web Service from this GitHub repo
-2. Use the repo root as the service root
-3. Let Render build from the included Dockerfile
-4. Set the required environment variables
+Current `render.yaml` service name:
 
-### Minimum Render env vars
+- `mcp_connect`
+
+Build/start commands:
+
+```text
+Build: pip install --upgrade pip && pip install --no-cache-dir -r requirements-render.txt
+Start: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+### Minimum Render environment variables
 
 ```env
 MATERIALS_API_KEY=your_materials_project_key
@@ -311,35 +348,42 @@ curl https://your-render-service.onrender.com/health
 curl https://your-render-service.onrender.com/.well-known/mcp.json
 ```
 
-Expected MCP endpoint:
+Then point Streamlit to:
 
 ```text
 https://your-render-service.onrender.com/mcp
 ```
 
-## Deploy Streamlit To Streamlit Community Cloud
+## Deploy Streamlit to Streamlit Community Cloud
 
-1. Use `streamlit_ui/app.py` as the app entrypoint
-2. Ensure Streamlit sees `streamlit_ui/requirements.txt`
-3. Add secrets in Streamlit:
+1. Connect the GitHub repo.
+2. Set the main file to `streamlit_ui/app.py`.
+3. Let Streamlit Cloud install `streamlit_ui/requirements.txt`.
+4. Add `MCP_SERVER_URL` in Streamlit Secrets.
+5. Redeploy.
 
-```toml
-MCP_SERVER_URL = "https://your-render-service.onrender.com/mcp"
+Do not upload a local `mcp.json`.
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest -q
 ```
 
-4. If server auth is enabled, also add:
+Important test coverage includes:
 
-```toml
-MCP_AUTH_TOKEN = "your-token"
+- MCP client behavior
+- query parsing
+- result normalization
+
+Useful local checks:
+
+```bash
+python -m compileall streamlit_ui
+python -m compileall app
 ```
-
-5. Deploy
-
-Important:
-
-- do not configure Streamlit with `mcp.json`
-- do not use Claude Desktop MCP config for Streamlit
-- Streamlit is just an HTTP client to the remote MCP service
 
 ## Sample Prompts
 
@@ -349,44 +393,125 @@ Important:
 - `Find stable cathode materials for batteries`
 - `Get properties for mp-149`
 
-## Testing
+## Manual Endpoint Checks
 
-Run:
+### Check backend health
 
 ```bash
-pytest -q
+curl https://asm-mcp-materials-platform.onrender.com/health
 ```
 
-Current coverage includes:
+### Check MCP metadata
 
-- MCP client retry and caching behavior
-- query parsing
-- result normalization
-- server tool behavior
+```bash
+curl https://asm-mcp-materials-platform.onrender.com/.well-known/mcp.json
+```
 
-## Practical Deployment Pattern
+### Check a REST helper route
 
-### Option A: local dev
+```bash
+curl -X POST https://asm-mcp-materials-platform.onrender.com/api/materials/search \
+  -H "Content-Type: application/json" \
+  -d '{"formula":"Fe2O3","limit":3,"offset":0}'
+```
 
-- MCP server: local
-- Streamlit: local
-- `MCP_SERVER_URL=http://localhost:8000/mcp`
+## Troubleshooting
 
-### Option B: backend on Render, UI local
+### Browser opening `/mcp` returns an error
 
-- MCP server: Render
-- Streamlit: local
-- `MCP_SERVER_URL=https://your-render-service.onrender.com/mcp`
+This is expected.
 
-### Option C: backend on Render, UI on Streamlit Cloud
+`/mcp` is a Streamable HTTP MCP endpoint, not a normal JSON REST route. If you open it directly in a browser or use a client that does not accept MCP streaming, you may see errors like:
 
-- MCP server: Render
-- Streamlit: Streamlit Community Cloud
-- Streamlit secret `MCP_SERVER_URL=https://your-render-service.onrender.com/mcp`
+- `Client must accept text/event-stream`
+- `Missing session ID`
 
-## Notes
+Use:
 
-- the MCP server remains the single backend integration layer
-- the Streamlit app is a separate deployable client
-- OQMD is optional and can stay disabled for simpler deployments
-- `stdio` MCP mode is for local MCP desktop/tool clients, not for Streamlit remote integration
+- `/health` for health checks
+- `/.well-known/mcp.json` for discovery
+- an MCP-aware client for `/mcp`
+
+### Streamlit says `ModuleNotFoundError: No module named 'streamlit_ui'`
+
+This usually happens when Streamlit Cloud runs `streamlit_ui/app.py` directly and package paths are not set correctly. The app already includes the needed path bootstrap. Redeploy from the latest `main`.
+
+### Streamlit says `Could not find page: streamlit_ui/app.py`
+
+This happens when `st.switch_page()` uses the wrong path. The correct home page reference is:
+
+```text
+app.py
+```
+
+not:
+
+```text
+streamlit_ui/app.py
+```
+
+### Streamlit says `Tool call failed ... All connection attempts failed`
+
+Usually one of these is true:
+
+- `MCP_SERVER_URL` is missing in Streamlit secrets
+- Streamlit is trying `localhost` in the cloud
+- the Render backend is not healthy
+
+Recommended secret:
+
+```toml
+MCP_SERVER_URL = "https://asm-mcp-materials-platform.onrender.com/mcp"
+```
+
+### Streamlit says `cannot be modified after the widget ... is instantiated`
+
+This is a Streamlit widget state timing issue. The app uses a queued prompt flow with `pending_prompt` to avoid mutating text-input state after render. If you see this again, redeploy from the latest `main`.
+
+### Streamlit shows `localhost:8501/healthz connection refused`
+
+This usually appears briefly during app startup on Streamlit Cloud while the process is still initializing. If the app comes up afterward, this is not the real failure.
+
+### Render returns `502 Bad Gateway`
+
+Common causes:
+
+- Materials Project API key is missing or invalid
+- Render is cold-starting or mid-redeploy
+- upstream Materials Project call failed
+- backend tool execution failed and bubbled up through MCP
+
+Check:
+
+- backend `/health`
+- backend `/.well-known/mcp.json`
+- Render logs
+- `MATERIALS_API_KEY`
+
+### OQMD failures appear in logs
+
+Set:
+
+```env
+OQMD_REQUIRED=false
+```
+
+unless you explicitly need OQMD federation.
+
+## Dependency Notes
+
+- `requirements.txt` is for full local development
+- `requirements-render.txt` is for lean backend deployment
+- `requirements-streamlit.txt` is for Streamlit runtime
+- `streamlit_ui/requirements.txt` exists because Streamlit Cloud looks for requirements near the app entrypoint
+
+## Security Notes
+
+- never hardcode Materials Project credentials
+- use Render env vars for backend secrets
+- use Streamlit Cloud Secrets for frontend secrets
+- if an API key was ever pasted into chat or logs, rotate it
+
+## Summary
+
+Use the backend as the single Materials Project integration layer, deploy it separately on Render, and point the Streamlit app at the MCP endpoint with `MCP_SERVER_URL`. For local work, run both parts on your machine. For hosted use, keep Streamlit on Streamlit Community Cloud and the MCP server on Render.
