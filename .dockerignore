@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.idea
+.DS_Store
+tests
+streamlit_ui
+.streamlit
+claude_desktop_config.json
+mcp.json
+asm-mcp-materials-platform.eml
+asm-mcp-materials-platform.iml
+asm-mcp-materials-platform.userlibraries
