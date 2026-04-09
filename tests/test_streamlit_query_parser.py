@@ -31,3 +31,11 @@ def test_parse_query_normalizes_lowercase_elements():
 
     assert plan.intent == "advanced_search"
     assert plan.arguments["elements"] == ["Si", "O"]
+
+
+def test_parse_query_routes_battery_cathode_prompt_to_chat_search():
+    plan = parse_user_query("Find stable cathode materials for batteries")
+
+    assert plan.intent == "chat_search"
+    assert plan.tool_name == "ask_materials_project_tool"
+    assert plan.arguments["question"] == "Find stable cathode materials for batteries"

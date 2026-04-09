@@ -84,6 +84,20 @@ def test_ask_materials_project_applies_lightweight_alloy_heuristics():
     assert result["heuristics"]
 
 
+def test_ask_materials_project_applies_battery_cathode_heuristics_for_plural_batteries():
+    with patch(
+        "app.tools.materials_tools.advanced_search_materials",
+        return_value={"count": 1, "total_source_rows": 1, "data": [{"material_id": "mp-555", "crystal_system": "orthorhombic"}]},
+    ):
+        result = ask_materials_project_tool("Find stable cathode materials for batteries", limit=10)
+
+    assert result["intent"] == "advanced_material_search"
+    assert result["elements"] == ["Li", "O"]
+    assert result["applied_filters"]["is_stable"] is True
+    assert result["applied_filters"]["num_elements"]["min"] == 2
+    assert any("battery cathode" in message for message in result["heuristics"])
+
+
 def test_ask_materials_project_rejects_unparsable_question():
     with pytest.raises(ExternalServiceError):
         ask_materials_project_tool("Tell me something interesting")

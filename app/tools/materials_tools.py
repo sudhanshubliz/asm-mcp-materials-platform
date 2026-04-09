@@ -207,6 +207,11 @@ def _extract_filters(question: str) -> tuple[list[tuple[str, str, float]], list[
         predicted_stable = True
     if "predicted_stable = false" in q or "predicted stable = false" in q or "predicted stable false" in q:
         predicted_stable = False
+    if predicted_stable is None:
+        if re.search(r"\bstable\b", q) and not re.search(r"\b(?:un|meta)stable\b", q):
+            predicted_stable = True
+        elif re.search(r"\b(?:un|meta)stable\b", q):
+            predicted_stable = False
 
     if "non-metal" in q or "non metal" in q:
         is_metal = False
@@ -335,7 +340,7 @@ def _build_search_payload(question: str, limit: int, offset: int) -> tuple[dict[
         _upsert_range_field(payload, "bulk_modulus_vrh", minimum=40.0)
         _upsert_range_field(payload, "shear_modulus_vrh", minimum=20.0)
         heuristics.append("Interpreted 'aerospace' as stable materials with lightweight and stiffness bias.")
-    if "cathode" in q and "battery" in q and not payload.get("elements"):
+    if "cathode" in q and re.search(r"\bbatter(?:y|ies)\b", q) and not payload.get("elements"):
         payload["elements"] = ["Li", "O"]
         payload["is_stable"] = True if payload.get("is_stable") is None else payload["is_stable"]
         _upsert_range_field(payload, "num_elements", minimum=2)
