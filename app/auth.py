@@ -1,6 +1,5 @@
 from typing import Callable
 
-from azure.identity import DefaultAzureCredential
 from fastapi import Header, HTTPException, status
 
 from app.config import config
@@ -11,6 +10,10 @@ _credential = None
 def _get_credential():
     global _credential
     if _credential is None:
+        try:
+            from azure.identity import DefaultAzureCredential
+        except ModuleNotFoundError as exc:  # pragma: no cover
+            raise RuntimeError("azure-identity is not installed") from exc
         _credential = DefaultAzureCredential()
     return _credential
 
