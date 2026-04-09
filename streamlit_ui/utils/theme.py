@@ -41,7 +41,8 @@ def apply_theme() -> None:
         }
 
         .block-container {
-            padding-top: 1.1rem;
+            padding-top: 1rem;
+            padding-bottom: 2rem;
         }
 
         [data-testid="stSidebar"] {
@@ -59,16 +60,13 @@ def apply_theme() -> None:
             font-family: 'IBM Plex Mono', monospace !important;
         }
 
-        .asm-shell {
-            background: var(--asm-panel);
-            border: 1px solid var(--asm-line);
-            border-radius: 24px;
-            padding: 1.4rem 1.5rem;
-            backdrop-filter: blur(16px);
+        .asm-hero-shell {
+            padding: 0.4rem 0 0.8rem 0;
         }
 
         .asm-hero {
-            padding: 1.1rem 0 1.2rem 0;
+            max-width: 64rem;
+            padding: 1.2rem 0 1rem 0;
         }
 
         .asm-kicker {
@@ -88,8 +86,9 @@ def apply_theme() -> None:
 
         .asm-subtitle {
             color: var(--asm-muted);
-            font-size: 1rem;
-            max-width: 58ch;
+            font-size: 1.04rem;
+            line-height: 1.6;
+            max-width: 60ch;
         }
 
         .asm-badge {
@@ -105,6 +104,25 @@ def apply_theme() -> None:
             margin-bottom: 0.7rem;
         }
 
+        .asm-feature-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        .asm-feature-row span {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(20, 33, 29, 0.08);
+            border-radius: 999px;
+            padding: 0.42rem 0.8rem;
+            background: rgba(255, 255, 255, 0.58);
+            color: var(--asm-ink);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
         .asm-result {
             border-top: 1px solid var(--asm-line);
             padding-top: 1rem;
@@ -118,45 +136,73 @@ def apply_theme() -> None:
 
         div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] {
             position: sticky;
-            top: 0.8rem;
+            top: 0.55rem;
             z-index: 40;
-            padding-top: 0.15rem;
-            padding-bottom: 0.6rem;
-            background: linear-gradient(180deg, rgba(243, 245, 242, 0.98) 0%, rgba(243, 245, 242, 0.92) 78%, rgba(243, 245, 242, 0) 100%);
+            max-width: 72rem;
+            padding-top: 0.3rem;
+            padding-bottom: 0.75rem;
+            background: linear-gradient(180deg, rgba(243, 245, 242, 0.99) 0%, rgba(243, 245, 242, 0.95) 82%, rgba(243, 245, 242, 0) 100%);
         }
 
         div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] [data-testid="stForm"] {
             border: 1px solid var(--asm-line);
-            border-radius: 24px;
-            padding: 0.8rem 0.9rem 0.25rem;
-            background: rgba(255, 255, 255, 0.84);
+            border-radius: 26px;
+            padding: 0.65rem 0.7rem 0.35rem;
+            background: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(18px);
-            box-shadow: 0 16px 36px rgba(20, 33, 29, 0.08);
+            box-shadow: 0 18px 42px rgba(20, 33, 29, 0.08);
         }
 
         div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] input {
-            border-radius: 16px !important;
-            border: 1px solid rgba(20, 33, 29, 0.12) !important;
-            background: rgba(247, 248, 245, 0.92) !important;
-            min-height: 3rem;
+            border-radius: 18px !important;
+            border: 1px solid rgba(20, 33, 29, 0.1) !important;
+            background: rgba(247, 248, 245, 0.9) !important;
+            min-height: 3.25rem;
+            padding-left: 0.75rem !important;
         }
 
         div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] button[kind="secondaryFormSubmit"] {
-            border-radius: 16px;
-            min-height: 3rem;
+            border-radius: 18px;
+            min-height: 3.25rem;
             background: var(--asm-accent);
             color: white;
             border: none;
             font-weight: 700;
         }
 
+        div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] [data-testid="stCaptionContainer"] {
+            margin-top: 0.15rem;
+            margin-bottom: 0.25rem;
+        }
+
+        div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] button[kind="secondary"] {
+            min-height: 2.5rem;
+            border-radius: 999px;
+            border: 1px solid rgba(20, 33, 29, 0.08);
+            background: rgba(255, 255, 255, 0.78);
+            color: var(--asm-ink);
+            font-weight: 500;
+        }
+
+        [data-testid="stChatMessage"] {
+            max-width: 72rem;
+        }
+
+        [data-testid="stChatMessageContent"] {
+            border-radius: 18px;
+        }
+
         @media (max-width: 900px) {
             div[data-testid="stElementContainer"]:has(#asm-sticky-search-anchor) + div[data-testid="stElementContainer"] {
-                top: 0.4rem;
+                top: 0.25rem;
             }
 
             .asm-title {
                 font-size: 2.2rem;
+            }
+
+            .asm-subtitle {
+                font-size: 0.98rem;
             }
         }
         </style>

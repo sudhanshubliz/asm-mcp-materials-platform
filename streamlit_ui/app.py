@@ -14,6 +14,7 @@ from streamlit_ui.components.sidebar import render_sidebar
 from streamlit_ui.services.mcp_client import MCPClientError, MCPClientService
 from streamlit_ui.services.normalizers import normalize_comparison_response, normalize_mcp_response
 from streamlit_ui.services.query_parser import parse_user_query
+from streamlit_ui.utils.constants import SAMPLE_PROMPTS
 from streamlit_ui.utils.session import initialize_state, push_recent_query, save_query
 from streamlit_ui.utils.theme import apply_theme
 
@@ -87,16 +88,38 @@ def _render_top_search() -> str | None:
 
     st.markdown('<div id="asm-sticky-search-anchor"></div>', unsafe_allow_html=True)
     with st.form("asm-top-search-form", clear_on_submit=False, border=False):
-        st.text_input(
-            "Search materials",
-            key="top_search_query",
-            placeholder="Ask about formulas, mp-ids, band gaps, cathodes, alloys, or comparisons",
-            label_visibility="collapsed",
-        )
-        submitted = st.form_submit_button("Search", use_container_width=True)
+        search_columns = st.columns([6, 1.35], vertical_alignment="center")
+        with search_columns[0]:
+            st.text_input(
+                "Search materials",
+                key="top_search_query",
+                placeholder="Search formulas, mp-ids, stable cathodes, band gaps, alloys, and more",
+                label_visibility="collapsed",
+            )
+        with search_columns[1]:
+            submitted = st.form_submit_button("Search", use_container_width=True)
+
+    st.caption("Try a quick start or write your own question in natural language.")
+    quick_actions = [
+        ("Aerospace alloys", SAMPLE_PROMPTS[0]),
+        ("Si vs GaAs", SAMPLE_PROMPTS[1]),
+        ("Band gap filter", SAMPLE_PROMPTS[2]),
+        ("Battery cathodes", SAMPLE_PROMPTS[3]),
+        ("mp-149 lookup", SAMPLE_PROMPTS[4]),
+    ]
+    clicked_prompt: str | None = None
+    action_columns = st.columns(len(quick_actions))
+    for column, (label, full_prompt) in zip(action_columns, quick_actions, strict=False):
+        with column:
+            if st.button(label, key=f"hero-prompt::{label}", use_container_width=True):
+                st.session_state.top_search_query = full_prompt
+                save_query(st.session_state, full_prompt)
+                clicked_prompt = full_prompt
 
     if queued_prompt:
         return queued_prompt
+    if clicked_prompt:
+        return clicked_prompt
     if submitted:
         return st.session_state.top_search_query.strip()
     return None
@@ -107,21 +130,29 @@ def main() -> None:
     initialize_state(st.session_state)
     render_sidebar()
 
-    prompt = _render_top_search()
-
     st.markdown(
         """
-        <div class="asm-hero">
-            <div class="asm-badge">Remote MCP workflow</div>
-            <div class="asm-kicker">ASM Materials Copilot</div>
-            <h1 class="asm-title">Chat with your Materials Project server.</h1>
-            <p class="asm-subtitle">
-                Search formulas, inspect mp-ids, compare materials, and export normalized results without relying on local MCP config files.
-            </p>
-        </div>
+        <section class="asm-hero-shell">
+            <div class="asm-hero">
+                <div class="asm-badge">Remote MCP workflow</div>
+                <div class="asm-kicker">ASM Materials Copilot</div>
+                <h1 class="asm-title">Chat with your Materials Project server.</h1>
+                <p class="asm-subtitle">
+                    Search formulas, inspect mp-ids, compare materials, and export normalized results through your remote MCP endpoint.
+                </p>
+                <div class="asm-feature-row">
+                    <span>Formula search</span>
+                    <span>mp-id lookup</span>
+                    <span>Property filters</span>
+                    <span>Compare and export</span>
+                </div>
+            </div>
+        </section>
         """,
         unsafe_allow_html=True,
     )
+
+    prompt = _render_top_search()
 
     shell = st.container()
     with shell:
