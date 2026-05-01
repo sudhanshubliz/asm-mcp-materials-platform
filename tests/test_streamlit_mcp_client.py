@@ -70,6 +70,36 @@ def test_client_auto_falls_back_to_render_when_local_unavailable(monkeypatch):
     assert client.base_url == RENDER_MCP_URL
 
 
+def test_client_ignores_configured_localhost_when_unreachable(monkeypatch):
+    def fake_probe(url, timeout_seconds):
+        return url == RENDER_MCP_URL
+
+    monkeypatch.setattr("streamlit_ui.services.mcp_client._probe_health", fake_probe)
+    monkeypatch.setattr(
+        "streamlit_ui.services.mcp_client._get_env_or_secret",
+        lambda name, default="": LOCAL_MCP_URL,
+    )
+
+    client = MCPClientService(base_url=None)
+
+    assert client.base_url == RENDER_MCP_URL
+
+
+def test_client_uses_configured_localhost_when_reachable(monkeypatch):
+    monkeypatch.setattr(
+        "streamlit_ui.services.mcp_client._probe_health",
+        lambda url, timeout_seconds: url == LOCAL_MCP_URL,
+    )
+    monkeypatch.setattr(
+        "streamlit_ui.services.mcp_client._get_env_or_secret",
+        lambda name, default="": LOCAL_MCP_URL,
+    )
+
+    client = MCPClientService(base_url=None)
+
+    assert client.base_url == LOCAL_MCP_URL
+
+
 def test_client_defaults_to_local_when_no_probe_succeeds(monkeypatch):
     monkeypatch.setattr("streamlit_ui.services.mcp_client._probe_health", lambda url, timeout_seconds: False)
     monkeypatch.setattr("streamlit_ui.services.mcp_client._get_env_or_secret", lambda name, default="": "")

@@ -6,6 +6,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from cachetools import TTLCache
@@ -58,10 +59,24 @@ def _probe_health(base_url: str, timeout_seconds: float) -> bool:
         return False
 
 
+def _is_local_url(base_url: str) -> bool:
+    host = urlparse(base_url).hostname
+    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
 def _resolve_mcp_server_url(timeout_seconds: float) -> str:
     configured = _get_env_or_secret("MCP_SERVER_URL", "").strip()
     if configured:
-        return configured.rstrip("/")
+        configured = configured.rstrip("/")
+        if not _is_local_url(configured):
+            return configured
+
+        probe_timeout = min(timeout_seconds, 3.0)
+        if _probe_health(configured, timeout_seconds=probe_timeout):
+            return configured
+        if _probe_health(RENDER_MCP_URL, timeout_seconds=probe_timeout):
+            return RENDER_MCP_URL
+        return RENDER_MCP_URL
 
     for candidate in (LOCAL_MCP_URL, RENDER_MCP_URL):
         if _probe_health(candidate, timeout_seconds=min(timeout_seconds, 3.0)):
