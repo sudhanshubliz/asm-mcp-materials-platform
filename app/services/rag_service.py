@@ -1,11 +1,10 @@
 from app.config import config
 
 try:
-    from qdrant_client import QdrantClient
-    from sentence_transformers import SentenceTransformer
+    from qdrant_client import QdrantClient, models
 except ModuleNotFoundError:  # pragma: no cover
     QdrantClient = None  # type: ignore
-    SentenceTransformer = None  # type: ignore
+    models = None  # type: ignore
 
 _model = None
 _qdrant = None
@@ -14,6 +13,12 @@ _qdrant = None
 def _get_model():
     global _model
     if _model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ModuleNotFoundError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "sentence-transformers is not installed and Qdrant Cloud inference is not configured"
+            ) from exc
         if SentenceTransformer is None:
             raise RuntimeError("sentence-transformers is not installed")
         _model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -28,6 +33,7 @@ def _get_qdrant():
         client_kwargs = {"url": config.VECTOR_DB, "timeout": config.REQUEST_TIMEOUT}
         if config.QDRANT_API_KEY:
             client_kwargs["api_key"] = config.QDRANT_API_KEY
+            client_kwargs["cloud_inference"] = True
         _qdrant = QdrantClient(**client_kwargs)
     return _qdrant
 
@@ -45,18 +51,28 @@ def _payload_text(payload: dict | None) -> str:
 
 
 def search_documents(query: str, top_k: int | None = None):
-    model = _get_model()
     qdrant = _get_qdrant()
-
-    embedding = model.encode(query)
-    query_vector = embedding.tolist() if hasattr(embedding, "tolist") else list(embedding)
-
     limit = top_k or config.RAG_TOP_K
-    results = qdrant.search(
-        collection_name=config.RAG_COLLECTION,
-        query_vector=query_vector,
-        limit=limit,
-    )
+
+    if config.QDRANT_API_KEY:
+        if models is None:
+            raise RuntimeError("qdrant-client is not installed")
+        response = qdrant.query_points(
+            collection_name=config.RAG_COLLECTION,
+            query=models.Document(text=query, model=config.QDRANT_INFERENCE_MODEL),
+            limit=limit,
+            with_payload=True,
+        )
+        results = response.points
+    else:
+        model = _get_model()
+        embedding = model.encode(query)
+        query_vector = embedding.tolist() if hasattr(embedding, "tolist") else list(embedding)
+        results = qdrant.search(
+            collection_name=config.RAG_COLLECTION,
+            query_vector=query_vector,
+            limit=limit,
+        )
 
     return [
         {

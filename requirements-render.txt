@@ -10,5 +10,4 @@ pydantic
 redis
 python-dotenv
 mcp
-sentence-transformers
 qdrant-client

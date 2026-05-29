@@ -36,3 +36,5 @@ services:
         sync: false
       - key: QDRANT_COLLECTION
         value: materials_papers
+      - key: QDRANT_INFERENCE_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2

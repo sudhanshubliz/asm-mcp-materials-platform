@@ -43,6 +43,7 @@ class Config:
 
     VECTOR_DB = os.getenv("QDRANT_URL") or os.getenv("VECTOR_DB", "http://localhost:6333")
     QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
+    QDRANT_INFERENCE_MODEL = os.getenv("QDRANT_INFERENCE_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
     RAG_COLLECTION = os.getenv("QDRANT_COLLECTION") or os.getenv("RAG_COLLECTION", "materials_papers")
     RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 
