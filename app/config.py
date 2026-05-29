@@ -41,8 +41,9 @@ class Config:
     REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
     CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 
-    VECTOR_DB = os.getenv("VECTOR_DB", "http://localhost:6333")
-    RAG_COLLECTION = os.getenv("RAG_COLLECTION", "materials_papers")
+    VECTOR_DB = os.getenv("QDRANT_URL") or os.getenv("VECTOR_DB", "http://localhost:6333")
+    QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
+    RAG_COLLECTION = os.getenv("QDRANT_COLLECTION") or os.getenv("RAG_COLLECTION", "materials_papers")
     RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 
     REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))

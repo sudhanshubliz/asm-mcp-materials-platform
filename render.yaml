@@ -30,3 +30,9 @@ services:
         value: 0.5
       - key: CACHE_TTL_SECONDS
         value: 3600
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: materials_papers

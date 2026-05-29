@@ -29,6 +29,20 @@ def _summarize_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def normalize_mcp_response(tool_name: str, payload: dict[str, Any], query: str) -> NormalizedResult:
+    if tool_name == "rag_search_tool":
+        records = payload.get("data", []) if isinstance(payload, dict) else []
+        columns = list(records[0].keys()) if records else []
+        return NormalizedResult(
+            intent="nearest_neighbors",
+            title="Nearest neighbors",
+            subtitle=f"{len(records)} semantic matches from the Qdrant collection.",
+            records=records,
+            columns=columns,
+            metrics={"Matches": len(records)},
+            suggestions=["Try a shorter phrase", "Increase top-k to inspect more neighbors", *DEFAULT_SUGGESTIONS[:1]],
+            raw=payload,
+        )
+
     if tool_name == "get_material_by_id_tool":
         records = [payload]
         columns = list(payload.keys())

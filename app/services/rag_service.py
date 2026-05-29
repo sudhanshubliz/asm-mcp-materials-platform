@@ -25,8 +25,23 @@ def _get_qdrant():
     if _qdrant is None:
         if QdrantClient is None:
             raise RuntimeError("qdrant-client is not installed")
-        _qdrant = QdrantClient(url=config.VECTOR_DB)
+        client_kwargs = {"url": config.VECTOR_DB, "timeout": config.REQUEST_TIMEOUT}
+        if config.QDRANT_API_KEY:
+            client_kwargs["api_key"] = config.QDRANT_API_KEY
+        _qdrant = QdrantClient(**client_kwargs)
     return _qdrant
+
+
+def _payload_text(payload: dict | None) -> str:
+    if not payload:
+        return ""
+
+    for field_name in ("text", "content", "page_content", "document", "chunk", "summary", "abstract"):
+        value = payload.get(field_name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return ""
 
 
 def search_documents(query: str, top_k: int | None = None):
@@ -47,6 +62,7 @@ def search_documents(query: str, top_k: int | None = None):
         {
             "id": point.id,
             "score": point.score,
+            "text": _payload_text(point.payload),
             "payload": point.payload,
         }
         for point in results
