@@ -1,4 +1,9 @@
-from app.services.materials_service import MATERIAL_OUTPUT_COLUMNS, _normalize_output
+from unittest.mock import Mock, patch
+
+import pytest
+
+from app.services.exceptions import ExternalServiceError
+from app.services.materials_service import MATERIAL_OUTPUT_COLUMNS, _get_material_by_id_rest, _normalize_output
 
 
 def test_normalize_output_matches_requested_headers_and_aliases():
@@ -45,3 +50,18 @@ def test_normalize_output_drops_non_numeric_material_id():
 
     assert row["material_id"] is None
     assert row["materials_project_url"] is None
+
+
+def test_rest_material_lookup_rejects_mismatched_material_id():
+    response = Mock()
+    response.json.return_value = {"data": [{"material_id": "mp-gg", "formula_pretty": "Yb"}]}
+    response.raise_for_status.return_value = None
+    session = Mock()
+    session.get.return_value = response
+
+    with patch("app.services.materials_service.build_retrying_session", return_value=session), pytest.raises(
+        ExternalServiceError
+    ) as exc_info:
+        _get_material_by_id_rest("mp-162")
+
+    assert exc_info.value.status_code == 404

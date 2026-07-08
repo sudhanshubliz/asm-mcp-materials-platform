@@ -388,7 +388,12 @@ def _get_material_by_id_rest(material_id: str) -> dict:
     elif isinstance(payload, list):
         rows = payload
 
-    cleaned_docs = [_normalize_output(doc if isinstance(doc, dict) else {}) for doc in rows]
+    matching_rows = [
+        doc
+        for doc in rows
+        if isinstance(doc, dict) and _canonical_material_id(doc.get("material_id")) == material_id
+    ]
+    cleaned_docs = [_normalize_output(doc) for doc in matching_rows]
     if not cleaned_docs:
         raise ExternalServiceError(
             service="materials_project",
