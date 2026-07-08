@@ -107,3 +107,61 @@ def test_client_defaults_to_local_when_no_probe_succeeds(monkeypatch):
     client = MCPClientService(base_url=None)
 
     assert client.base_url == LOCAL_MCP_URL
+
+
+def test_call_tool_falls_back_to_rest_for_remote_mcp_failure(monkeypatch):
+    client = MCPClientService(base_url=RENDER_MCP_URL, retry_attempts=1)
+
+    def fail_mcp(coroutine):
+        coroutine.close()
+        raise RuntimeError("Client error '421 Misdirected Request'")
+
+    rest_call = MagicMock(return_value={"materials_project": {"data": []}})
+    monkeypatch.setattr(client, "_run_async", fail_mcp)
+    monkeypatch.setattr(client, "_call_tool_via_rest", rest_call)
+
+    result = client.call_tool("search_material_tool", {"formula": "Si"})
+
+    assert result == {"materials_project": {"data": []}}
+    rest_call.assert_called_once_with("search_material_tool", {"formula": "Si"})
+
+
+def test_call_tool_does_not_use_rest_fallback_for_local_mcp_failure(monkeypatch):
+    client = MCPClientService(base_url=LOCAL_MCP_URL, retry_attempts=1)
+
+    def fail_mcp(coroutine):
+        coroutine.close()
+        raise RuntimeError("connection refused")
+
+    rest_call = MagicMock(return_value={"ok": True})
+    monkeypatch.setattr(client, "_run_async", fail_mcp)
+    monkeypatch.setattr(client, "_call_tool_via_rest", rest_call)
+
+    try:
+        client.call_tool("search_material_tool", {"formula": "Si"})
+    except Exception as exc:
+        assert "connection refused" in str(exc)
+    else:
+        raise AssertionError("Expected local MCP failure to be raised")
+
+    rest_call.assert_not_called()
+
+
+def test_health_check_uses_rest_tool_list_when_mcp_listing_fails(monkeypatch):
+    client = MCPClientService(base_url=RENDER_MCP_URL)
+    response = MagicMock()
+    response.json.return_value = {"status": "ok"}
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr("streamlit_ui.services.mcp_client.httpx.get", MagicMock(return_value=response))
+
+    def fail_list(coroutine):
+        coroutine.close()
+        raise RuntimeError("Client error '421 Misdirected Request'")
+
+    monkeypatch.setattr(client, "_run_async", fail_list)
+
+    status = client.health_check()
+
+    assert status.ok is True
+    assert "search_material_tool" in status.tools
+    assert "REST fallback is active" in str(status.error)

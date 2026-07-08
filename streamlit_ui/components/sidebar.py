@@ -4,7 +4,7 @@ import streamlit as st
 
 from streamlit_ui.services.mcp_client import MCPClientService
 from streamlit_ui.utils.constants import SAMPLE_PROMPTS
-from streamlit_ui.utils.session import save_query
+from streamlit_ui.utils.session import initialize_state, save_query
 
 HOME_PAGE = "app.py"
 
@@ -28,6 +28,7 @@ def get_cached_connection_status() -> dict[str, object]:
 
 
 def render_sidebar() -> None:
+    initialize_state(st.session_state)
     status = get_cached_connection_status()
     with st.sidebar:
         st.markdown("### Connection")
@@ -35,7 +36,10 @@ def render_sidebar() -> None:
         st.caption(f"{badge} • {status['latency_ms']} ms")
         st.caption(status["endpoint"])
         if status["error"]:
-            st.error(str(status["error"]))
+            if status["ok"]:
+                st.warning(str(status["error"]))
+            else:
+                st.error(str(status["error"]))
 
         st.markdown("### Example prompts")
         for prompt in SAMPLE_PROMPTS:

@@ -14,6 +14,26 @@ from fastmcp import Client
 
 LOCAL_MCP_URL = "http://localhost:8000/mcp"
 RENDER_MCP_URL = "https://asm-mcp-materials-platform.onrender.com/mcp"
+REST_FALLBACK_TOOLS = [
+    "search_material_tool",
+    "search_materials_advanced_tool",
+    "get_material_by_id_tool",
+    "ask_materials_project_tool",
+    "rag_search_tool",
+]
+RANGE_ARGUMENT_PREFIXES = (
+    "num_elements",
+    "band_gap",
+    "density",
+    "volume",
+    "energy_above_hull",
+    "bulk_modulus_vrh",
+    "shear_modulus_vrh",
+    "weighted_surface_energy",
+    "work_function",
+    "surface_anisotropy",
+    "shape_factor",
+)
 
 
 class MCPClientError(RuntimeError):
@@ -62,6 +82,33 @@ def _probe_health(base_url: str, timeout_seconds: float) -> bool:
 def _is_local_url(base_url: str) -> bool:
     host = urlparse(base_url).hostname
     return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def _api_base_url_for(base_url: str) -> str:
+    return base_url[:-4] if base_url.endswith("/mcp") else base_url.rstrip("/")
+
+
+def _advanced_rest_payload(arguments: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, value in arguments.items():
+        if value in (None, [], {}):
+            continue
+        if key.endswith("_min") or key.endswith("_max"):
+            continue
+        payload[key] = value
+
+    for field_name in RANGE_ARGUMENT_PREFIXES:
+        minimum = arguments.get(f"{field_name}_min")
+        maximum = arguments.get(f"{field_name}_max")
+        if minimum is not None or maximum is not None:
+            range_payload: dict[str, float] = {}
+            if minimum is not None:
+                range_payload["min"] = minimum
+            if maximum is not None:
+                range_payload["max"] = maximum
+            payload[field_name] = range_payload
+
+    return payload
 
 
 def _resolve_mcp_server_url(timeout_seconds: float) -> str:
@@ -135,6 +182,58 @@ class MCPClientService:
             tools = await client.list_tools()
             return [tool.name for tool in tools]
 
+    def _auth_headers(self) -> dict[str, str]:
+        if not self.auth_token:
+            return {}
+        return {"Authorization": f"Bearer {self.auth_token}"}
+
+    def _call_tool_via_rest(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        api_base_url = _api_base_url_for(self.base_url)
+        headers = self._auth_headers()
+
+        if tool_name == "search_material_tool":
+            response = httpx.post(
+                f"{api_base_url}/api/materials/search",
+                json=arguments,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+        elif tool_name == "search_materials_advanced_tool":
+            response = httpx.post(
+                f"{api_base_url}/api/materials/advanced-search",
+                json=_advanced_rest_payload(arguments),
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+        elif tool_name == "get_material_by_id_tool":
+            response = httpx.get(
+                f"{api_base_url}/api/materials/{arguments['material_id']}",
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+        elif tool_name == "ask_materials_project_tool":
+            response = httpx.post(
+                f"{api_base_url}/api/materials/ask",
+                json=arguments,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+        elif tool_name == "rag_search_tool":
+            response = httpx.post(
+                f"{api_base_url}/api/rag/search",
+                json=arguments,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
+        else:
+            raise MCPClientError(f"No REST fallback is configured for {tool_name}")
+
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise MCPClientError(f"Unexpected REST response payload from {tool_name}: {payload!r}")
+        return payload
+
     def call_tool(self, tool_name: str, arguments: dict[str, Any], *, use_cache: bool = True) -> dict[str, Any]:
         cache_key = self._cache_key(tool_name, arguments)
         if use_cache and cache_key in self._cache:
@@ -152,6 +251,15 @@ class MCPClientService:
                 if attempt == self.retry_attempts:
                     break
                 time.sleep(self.retry_backoff_seconds * attempt)
+
+        if tool_name in REST_FALLBACK_TOOLS and not _is_local_url(self.base_url):
+            try:
+                payload = self._call_tool_via_rest(tool_name, arguments)
+                if use_cache:
+                    self._cache[cache_key] = payload
+                return payload
+            except Exception as exc:
+                last_error = exc
 
         raise MCPClientError(f"Tool call failed for {tool_name} via {self.base_url}: {last_error}")
 
@@ -176,7 +284,12 @@ class MCPClientService:
             response = httpx.get(self.health_url, timeout=self.timeout_seconds)
             response.raise_for_status()
             health = response.json()
-            tools = self._run_async(self._list_tools_once())
+            try:
+                tools = self._run_async(self._list_tools_once())
+                error = None
+            except Exception as exc:
+                tools = REST_FALLBACK_TOOLS
+                error = f"MCP tool listing unavailable; REST fallback is active: {exc}"
             latency_ms = round((time.perf_counter() - start) * 1000, 2)
             return ConnectionStatus(
                 ok=True,
@@ -184,6 +297,7 @@ class MCPClientService:
                 tools=tools,
                 health=health,
                 endpoint=self.base_url,
+                error=error,
             )
         except Exception as exc:
             latency_ms = round((time.perf_counter() - start) * 1000, 2)

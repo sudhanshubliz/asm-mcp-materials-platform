@@ -31,6 +31,12 @@ class RagSearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class MaterialsQuestionRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=5000)
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0, le=10000)
+
+
 class NumericRange(BaseModel):
     min: float | None = None
     max: float | None = None

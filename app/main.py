@@ -17,6 +17,7 @@ from app.auth import require_authenticated_user, require_role
 from app.config import config
 from app.models.schemas import (
     AdvancedMaterialSearchRequest,
+    MaterialsQuestionRequest,
     MaterialSearchRequest,
     RagSearchRequest,
     SQLQueryRequest,
@@ -284,6 +285,14 @@ def create_application() -> FastAPI:
             limit=payload.limit,
             offset=payload.offset,
         )
+
+    @api.post("/api/materials/ask")
+    def materials_ask(
+        payload: MaterialsQuestionRequest,
+        _auth: str | None = Depends(require_authenticated_user),
+        _roles: set[str] = Depends(require_role({"MaterialsReader", "MaterialsEngineer", "MaterialsAdmin"})),
+    ):
+        return ask_materials_project_tool(payload.question, payload.limit, payload.offset)
 
     @api.get("/api/materials/{material_id}")
     def materials_by_id(
