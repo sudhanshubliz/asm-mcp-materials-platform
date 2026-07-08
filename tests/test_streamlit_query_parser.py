@@ -9,6 +9,13 @@ def test_parse_query_detects_material_id_lookup():
     assert plan.arguments["material_id"] == "mp-149"
 
 
+def test_parse_query_does_not_treat_non_numeric_mp_id_as_lookup():
+    plan = parse_user_query("Get properties for mp-djqth")
+
+    assert plan.intent == "chat_search"
+    assert plan.tool_name == "ask_materials_project_tool"
+
+
 def test_parse_query_detects_compare_from_common_names():
     plan = parse_user_query("Compare silicon and gallium arsenide")
 

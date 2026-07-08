@@ -289,9 +289,9 @@ def create_application() -> FastAPI:
     def materials_by_id(
         material_id: str = Path(
             ...,
-            min_length=3,
+            min_length=4,
             max_length=40,
-            pattern=r"^mp-[A-Za-z0-9-]+$",
+            pattern=r"^mp-\d+$",
             description="Materials Project material ID, e.g. mp-149",
         ),
         _auth: str | None = Depends(require_authenticated_user),

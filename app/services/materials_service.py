@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.config import config
@@ -10,6 +11,7 @@ from app.services.http_client import build_retrying_session
 
 MATERIAL_OUTPUT_COLUMNS = [
     "material_id",
+    "materials_project_url",
     "nsites",
     "formula_pretty",
     "chemsys",
@@ -39,6 +41,8 @@ MATERIAL_OUTPUT_COLUMNS = [
     "shear_modulus_reuss",
     "shear_modulus_vrh",
 ]
+
+_CANONICAL_MP_ID_PATTERN = re.compile(r"^mp-\d+$")
 
 
 def _ensure_api_key() -> None:
@@ -71,6 +75,21 @@ def _extract_metric_values(metric) -> tuple[float | None, float | None, float | 
     return voigt, reuss, vrh
 
 
+def _canonical_material_id(value) -> str | None:
+    if value is None:
+        return None
+    material_id = str(value)
+    if _CANONICAL_MP_ID_PATTERN.fullmatch(material_id):
+        return material_id
+    return None
+
+
+def _materials_project_url(material_id: str | None) -> str | None:
+    if material_id is None:
+        return None
+    return f"https://next-gen.materialsproject.org/materials/{material_id}"
+
+
 def _normalize_output(payload: dict) -> dict:
     symmetry = payload.get("symmetry") or {}
     bulk_modulus = payload.get("bulk_modulus")
@@ -78,9 +97,11 @@ def _normalize_output(payload: dict) -> dict:
 
     bulk_voigt, bulk_reuss, bulk_vrh = _extract_metric_values(bulk_modulus)
     shear_voigt, shear_reuss, shear_vrh = _extract_metric_values(shear_modulus)
+    material_id = _canonical_material_id(payload.get("material_id"))
 
     normalized = {
-        "material_id": payload.get("material_id"),
+        "material_id": material_id,
+        "materials_project_url": _materials_project_url(material_id),
         "nsites": payload.get("nsites"),
         "formula_pretty": payload.get("formula_pretty"),
         "chemsys": payload.get("chemsys"),

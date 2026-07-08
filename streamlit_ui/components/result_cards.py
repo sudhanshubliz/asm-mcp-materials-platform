@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import streamlit as st
@@ -7,11 +8,39 @@ import streamlit as st
 from streamlit_ui.services.normalizers import NormalizedResult
 from streamlit_ui.utils.exports import records_to_csv, records_to_dataframe, records_to_json
 
+_CANONICAL_MP_ID_PATTERN = re.compile(r"^mp-\d+$")
+_STRUCTURE_IMAGE_FIELDS = ("structure_image_url", "structure_url", "image_url", "thumbnail_url")
+
 
 def _render_metrics(metrics: dict[str, Any]) -> None:
     columns = st.columns(len(metrics))
     for column, (label, value) in zip(columns, metrics.items()):
         column.metric(label, value)
+
+
+def _materials_project_url(material_id: Any) -> str | None:
+    if not isinstance(material_id, str) or not _CANONICAL_MP_ID_PATTERN.fullmatch(material_id):
+        return None
+    return f"https://next-gen.materialsproject.org/materials/{material_id}"
+
+
+def _structure_image_url(record: dict[str, Any]) -> str | None:
+    for field in _STRUCTURE_IMAGE_FIELDS:
+        value = record.get(field)
+        if isinstance(value, str) and value.startswith(("http://", "https://")):
+            return value
+    return None
+
+
+def _render_structure_preview(record: dict[str, Any]) -> None:
+    image_url = _structure_image_url(record)
+    material_url = record.get("materials_project_url") or _materials_project_url(record.get("material_id"))
+
+    if image_url:
+        st.image(image_url, caption="Structure preview", use_container_width=True)
+
+    if isinstance(material_url, str):
+        st.link_button("View structure on Materials Project", material_url, use_container_width=True)
 
 
 def render_result(
@@ -59,6 +88,7 @@ def render_result(
                 cols[1].metric("Density", record.get("density", "N/A"))
                 cols[2].metric("Stable", "Yes" if record.get("predicted_stable") else "No")
                 cols[3].metric("Metal", "Yes" if record.get("is_metal") else "No")
+                _render_structure_preview(record)
                 st.json(record, expanded=False)
     else:
         st.info("No records matched the current query.")

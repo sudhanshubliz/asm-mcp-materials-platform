@@ -7,11 +7,16 @@ from app.tools.materials_tools import ask_materials_project_tool
 
 
 def test_ask_materials_project_routes_by_material_id():
-    with patch("app.tools.materials_tools.get_material_by_id_tool", return_value={"material_id": "mp-csvwu"}):
-        result = ask_materials_project_tool("Get result for material_id mp-csvwu")
+    with patch("app.tools.materials_tools.get_material_by_id_tool", return_value={"material_id": "mp-149"}):
+        result = ask_materials_project_tool("Get result for material_id mp-149")
 
     assert result["intent"] == "material_by_id"
-    assert result["material_id"] == "mp-csvwu"
+    assert result["material_id"] == "mp-149"
+
+
+def test_ask_materials_project_rejects_non_numeric_material_id():
+    with pytest.raises(ExternalServiceError):
+        ask_materials_project_tool("Get result for material_id mp-djqth")
 
 
 def test_ask_materials_project_routes_by_formula():

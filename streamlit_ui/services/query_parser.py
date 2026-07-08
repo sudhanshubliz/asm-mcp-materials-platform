@@ -22,7 +22,7 @@ COMMON_NAME_ALIASES = {
     "lithium iron phosphate": "LiFePO4",
 }
 
-MP_ID_PATTERN = re.compile(r"\b(mp-\d+|mp-[A-Za-z0-9-]+)\b", re.IGNORECASE)
+MP_ID_PATTERN = re.compile(r"\b(mp-\d+)\b", re.IGNORECASE)
 FORMULA_TOKEN_PATTERN = re.compile(r"\b[A-Z][A-Za-z0-9]{0,14}\b")
 
 

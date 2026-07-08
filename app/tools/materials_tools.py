@@ -61,7 +61,7 @@ def get_material_by_id_tool(material_id: str) -> dict:
     return get_material_by_id(request.material_id)
 
 
-_MP_ID_PATTERN = re.compile(r"\b(mp-[A-Za-z0-9-]+)\b")
+_MP_ID_PATTERN = re.compile(r"\b(mp-\d+)\b")
 # Supports both single-element (e.g., Dy) and multi-element formulas (e.g., Fe2O3).
 _FORMULA_PATTERN = re.compile(r"\b([A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)*)\b")
 

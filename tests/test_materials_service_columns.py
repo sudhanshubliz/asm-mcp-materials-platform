@@ -3,7 +3,7 @@ from app.services.materials_service import MATERIAL_OUTPUT_COLUMNS, _normalize_o
 
 def test_normalize_output_matches_requested_headers_and_aliases():
     payload = {
-        "material_id": "mp-csvwu",
+        "material_id": "mp-123",
         "nsites": 10,
         "formula_pretty": "Fe2O3",
         "chemsys": "Fe-O",
@@ -31,8 +31,17 @@ def test_normalize_output_matches_requested_headers_and_aliases():
     row = _normalize_output(payload)
 
     assert list(row.keys()) == MATERIAL_OUTPUT_COLUMNS
+    assert row["material_id"] == "mp-123"
+    assert row["materials_project_url"] == "https://next-gen.materialsproject.org/materials/mp-123"
     assert row["predicted_stable"] is True
     assert row["work_function"] == 4.9
     assert row["crystal_system"] == "trigonal"
     assert row["bulk_modulus_vrh"] == 205
     assert row["shear_modulus_reuss"] == 110
+
+
+def test_normalize_output_drops_non_numeric_material_id():
+    row = _normalize_output({"material_id": "mp-djqth"})
+
+    assert row["material_id"] is None
+    assert row["materials_project_url"] is None

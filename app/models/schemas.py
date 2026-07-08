@@ -18,7 +18,7 @@ class MaterialSearchRequest(BaseModel):
 
 
 class MaterialByIdRequest(BaseModel):
-    material_id: str = Field(min_length=3, max_length=40, pattern=r"^mp-[A-Za-z0-9-]+$")
+    material_id: str = Field(min_length=4, max_length=40, pattern=r"^mp-\d+$")
 
 
 class SQLQueryRequest(BaseModel):
