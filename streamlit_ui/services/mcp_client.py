@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -109,6 +110,49 @@ def _advanced_rest_payload(arguments: dict[str, Any]) -> dict[str, Any]:
             payload[field_name] = range_payload
 
     return payload
+
+
+def _upsert_range(payload: dict[str, Any], field_name: str, *, minimum: float | None = None, maximum: float | None = None) -> None:
+    current = dict(payload.get(field_name) or {})
+    if minimum is not None:
+        current["min"] = minimum if "min" not in current else max(current["min"], minimum)
+    if maximum is not None:
+        current["max"] = maximum if "max" not in current else min(current["max"], maximum)
+    if current:
+        payload[field_name] = current
+
+
+def _ask_compat_rest_payload(arguments: dict[str, Any]) -> dict[str, Any] | None:
+    question = str(arguments.get("question") or "").strip()
+    if not question:
+        return None
+
+    payload: dict[str, Any] = {
+        "query": question,
+        "limit": arguments.get("limit", 20),
+        "offset": arguments.get("offset", 0),
+    }
+    lowered = question.lower()
+
+    if "lightweight" in lowered:
+        _upsert_range(payload, "density", maximum=5.0)
+    if "alloy" in lowered or "alloys" in lowered:
+        payload["is_metal"] = True
+        _upsert_range(payload, "num_elements", minimum=2)
+    if "aerospace" in lowered:
+        payload["is_stable"] = True
+        _upsert_range(payload, "bulk_modulus_vrh", minimum=40.0)
+        _upsert_range(payload, "shear_modulus_vrh", minimum=20.0)
+    if "cathode" in lowered and re.search(r"\bbatter(?:y|ies)\b", lowered):
+        payload["elements"] = ["Li", "O"]
+        payload["is_stable"] = True
+        _upsert_range(payload, "num_elements", minimum=2)
+    if "semiconductor" in lowered or "semiconductors" in lowered:
+        payload["is_metal"] = False
+        _upsert_range(payload, "band_gap", minimum=0.1, maximum=3.5)
+
+    has_criteria = any(key not in {"query", "limit", "offset"} for key in payload)
+    return payload if has_criteria else None
 
 
 def _resolve_mcp_server_url(timeout_seconds: float) -> str:
@@ -218,6 +262,16 @@ class MCPClientService:
                 headers=headers,
                 timeout=self.timeout_seconds,
             )
+            if response.status_code in {404, 405}:
+                compat_payload = _ask_compat_rest_payload(arguments)
+                if compat_payload is None:
+                    response.raise_for_status()
+                response = httpx.post(
+                    f"{api_base_url}/api/materials/advanced-search",
+                    json=compat_payload,
+                    headers=headers,
+                    timeout=self.timeout_seconds,
+                )
         elif tool_name == "rag_search_tool":
             response = httpx.post(
                 f"{api_base_url}/api/rag/search",

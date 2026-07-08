@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from streamlit_ui.services.mcp_client import LOCAL_MCP_URL, MCPClientService, RENDER_MCP_URL
+from streamlit_ui.services.mcp_client import LOCAL_MCP_URL, MCPClientService, RENDER_MCP_URL, _ask_compat_rest_payload
 
 
 def test_call_tool_retries_then_succeeds(monkeypatch):
@@ -165,3 +165,38 @@ def test_health_check_uses_rest_tool_list_when_mcp_listing_fails(monkeypatch):
     assert status.ok is True
     assert "search_material_tool" in status.tools
     assert "REST fallback is active" in str(status.error)
+
+
+def test_ask_compat_payload_handles_lightweight_aerospace_alloys():
+    payload = _ask_compat_rest_payload(
+        {"question": "Find lightweight alloys used in aerospace engineering", "limit": 10, "offset": 0}
+    )
+
+    assert payload == {
+        "query": "Find lightweight alloys used in aerospace engineering",
+        "limit": 10,
+        "offset": 0,
+        "density": {"max": 5.0},
+        "is_metal": True,
+        "num_elements": {"min": 2},
+        "is_stable": True,
+        "bulk_modulus_vrh": {"min": 40.0},
+        "shear_modulus_vrh": {"min": 20.0},
+    }
+
+
+def test_ask_compat_payload_handles_battery_cathodes():
+    payload = _ask_compat_rest_payload({"question": "Find stable cathode materials for batteries"})
+
+    assert payload == {
+        "query": "Find stable cathode materials for batteries",
+        "limit": 20,
+        "offset": 0,
+        "elements": ["Li", "O"],
+        "is_stable": True,
+        "num_elements": {"min": 2},
+    }
+
+
+def test_ask_compat_payload_returns_none_for_unknown_question():
+    assert _ask_compat_rest_payload({"question": "Tell me something interesting"}) is None
