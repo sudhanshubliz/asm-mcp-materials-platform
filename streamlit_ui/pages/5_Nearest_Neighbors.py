@@ -40,7 +40,22 @@ def main() -> None:
     render_sidebar()
 
     st.title("Nearest Neighbors")
-    st.caption("Search your Qdrant collection through the MCP server and inspect matching text chunks.")
+    st.caption("Search your Qdrant collection and inspect matching text chunks.")
+
+    client = get_client()
+    qdrant_status = client.qdrant_health()
+    status_cols = st.columns(3)
+    status_cols[0].metric("Qdrant", "OK" if qdrant_status.get("ok") else "Unavailable")
+    status_cols[1].metric("Collection", qdrant_status.get("collection") or "N/A")
+    status_cols[2].metric(
+        "Points",
+        qdrant_status.get("points_count") if qdrant_status.get("points_count") is not None else "N/A",
+    )
+    if qdrant_status.get("error"):
+        st.warning("Nearest-neighbor search is not ready. Open Health Debug for Qdrant details.")
+        if st.session_state.debug_mode:
+            with st.expander("Qdrant debug payload", expanded=False):
+                st.json(qdrant_status, expanded=False)
 
     with st.form("nearest-neighbors-form"):
         query = st.text_area(
@@ -58,15 +73,22 @@ def main() -> None:
         st.warning("Enter a query first.")
         return
 
+    if not qdrant_status.get("ok"):
+        st.error("Nearest-neighbor search is unavailable until Qdrant health is OK.")
+        return
+
     try:
         with st.spinner("Searching nearest neighbors..."):
-            payload = get_client().call_tool(
+            payload = client.call_tool(
                 "rag_search_tool",
                 {"question": query.strip(), "top_k": top_k},
                 use_cache=False,
             )
     except MCPClientError as exc:
         st.error(str(exc))
+        if st.session_state.debug_mode and exc.detail:
+            with st.expander("Debug details", expanded=False):
+                st.code(exc.detail)
         return
 
     records = payload.get("data", [])
@@ -87,10 +109,12 @@ def main() -> None:
                 st.markdown(text)
             else:
                 st.caption("No text field found in this payload.")
-            st.json(record.get("payload") or {}, expanded=False)
+            with st.expander("Payload", expanded=False):
+                st.json(record.get("payload") or {}, expanded=False)
 
-    with st.expander("Raw response", expanded=False):
-        st.json(payload, expanded=False)
+    if st.session_state.debug_mode:
+        with st.expander("Raw response", expanded=False):
+            st.json(payload, expanded=False)
 
 
 if __name__ == "__main__":

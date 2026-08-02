@@ -61,6 +61,9 @@ def _run_prompt(prompt: str) -> None:
                 )
             except MCPClientError as exc:
                 st.error(str(exc))
+                if st.session_state.debug_mode and exc.detail:
+                    with st.expander("Debug details", expanded=False):
+                        st.code(exc.detail)
 
 
 def _render_chat_history() -> None:

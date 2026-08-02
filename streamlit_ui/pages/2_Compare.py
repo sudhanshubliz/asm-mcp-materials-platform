@@ -11,7 +11,7 @@ import streamlit as st
 
 from streamlit_ui.components.result_cards import render_result
 from streamlit_ui.components.sidebar import render_sidebar
-from streamlit_ui.services.mcp_client import MCPClientService
+from streamlit_ui.services.mcp_client import MCPClientError, MCPClientService
 from streamlit_ui.services.normalizers import normalize_comparison_response
 from streamlit_ui.utils.session import initialize_state, push_recent_query
 from streamlit_ui.utils.theme import apply_theme
@@ -38,15 +38,24 @@ def main() -> None:
 
     if st.button("Compare materials", use_container_width=True):
         parsed_targets = [item.strip() for item in targets.split(",") if item.strip()]
-        records = get_client().compare_materials(parsed_targets)
-        push_recent_query(st.session_state, f"Compare: {', '.join(parsed_targets)}")
-        result = normalize_comparison_response(records, f"Compare {' vs '.join(parsed_targets)}")
-        render_result(
-            result,
-            show_raw_json=st.session_state.show_raw_json,
-            compact_mode=st.session_state.compact_mode,
-            key_prefix="compare-result",
-        )
+        if len(parsed_targets) < 2:
+            st.warning("Enter at least two materials to compare.")
+            return
+        try:
+            records = get_client().compare_materials(parsed_targets)
+            push_recent_query(st.session_state, f"Compare: {', '.join(parsed_targets)}")
+            result = normalize_comparison_response(records, f"Compare {' vs '.join(parsed_targets)}")
+            render_result(
+                result,
+                show_raw_json=st.session_state.show_raw_json,
+                compact_mode=st.session_state.compact_mode,
+                key_prefix="compare-result",
+            )
+        except MCPClientError as exc:
+            st.error(str(exc))
+            if st.session_state.debug_mode and exc.detail:
+                with st.expander("Debug details", expanded=False):
+                    st.code(exc.detail)
 
 
 if __name__ == "__main__":

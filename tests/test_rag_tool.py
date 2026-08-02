@@ -28,3 +28,9 @@ def test_rag_search_tool_returns_nearest_neighbor_payload(monkeypatch):
             }
         ],
     }
+
+
+def test_rag_health_tool_returns_qdrant_health(monkeypatch):
+    monkeypatch.setattr(rag_tools, "qdrant_health", lambda: {"ok": True, "collection": "materials_papers"})
+
+    assert rag_tools.rag_health_tool() == {"ok": True, "collection": "materials_papers"}

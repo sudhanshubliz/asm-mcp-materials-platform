@@ -11,6 +11,14 @@ def test_normalize_material_lookup_response():
     assert result.metrics["Matches"] == 1
 
 
+def test_normalize_material_lookup_uses_query_when_material_id_missing():
+    payload = {"material_id": None, "formula_pretty": "Si", "predicted_stable": True, "is_metal": False}
+
+    result = normalize_mcp_response("get_material_by_id_tool", payload, "Get properties for mp-149")
+
+    assert result.title == "Material snapshot for mp-149"
+
+
 def test_normalize_advanced_search_response():
     payload = {
         "count": 2,

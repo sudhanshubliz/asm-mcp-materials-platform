@@ -35,7 +35,7 @@ def render_sidebar() -> None:
         badge = "Connected" if status["ok"] else "Unavailable"
         st.caption(f"{badge} • {status['latency_ms']} ms")
         st.caption(status["endpoint"])
-        if status["error"]:
+        if status["error"] and (not status["ok"] or st.session_state.debug_mode):
             if status["ok"]:
                 st.warning(str(status["error"]))
             else:

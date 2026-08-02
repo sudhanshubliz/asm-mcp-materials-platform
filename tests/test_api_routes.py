@@ -22,3 +22,17 @@ def test_materials_ask_rest_endpoint_delegates_to_tool(monkeypatch):
         "offset": 2,
         "data": [],
     }
+
+
+def test_rag_health_rest_endpoint_delegates_to_tool(monkeypatch):
+    monkeypatch.setattr(
+        app_main,
+        "rag_health_tool",
+        lambda: {"ok": True, "collection": "materials_papers", "points_count": 12},
+    )
+    client = TestClient(app_main.create_application())
+
+    response = client.get("/api/rag/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "collection": "materials_papers", "points_count": 12}

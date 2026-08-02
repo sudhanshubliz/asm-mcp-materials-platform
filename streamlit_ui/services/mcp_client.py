@@ -21,6 +21,7 @@ REST_FALLBACK_TOOLS = [
     "get_material_by_id_tool",
     "ask_materials_project_tool",
     "rag_search_tool",
+    "rag_health_tool",
 ]
 RANGE_ARGUMENT_PREFIXES = (
     "num_elements",
@@ -38,7 +39,9 @@ RANGE_ARGUMENT_PREFIXES = (
 
 
 class MCPClientError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, detail: str | None = None) -> None:
+        super().__init__(message)
+        self.detail = detail
 
 
 @dataclass(frozen=True)
@@ -279,6 +282,12 @@ class MCPClientService:
                 headers=headers,
                 timeout=self.timeout_seconds,
             )
+        elif tool_name == "rag_health_tool":
+            response = httpx.get(
+                f"{api_base_url}/api/rag/health",
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
         else:
             raise MCPClientError(f"No REST fallback is configured for {tool_name}")
 
@@ -286,6 +295,9 @@ class MCPClientService:
         payload = response.json()
         if not isinstance(payload, dict):
             raise MCPClientError(f"Unexpected REST response payload from {tool_name}: {payload!r}")
+        if tool_name == "get_material_by_id_tool" and not payload.get("material_id"):
+            payload["material_id"] = arguments["material_id"]
+            payload.setdefault("materials_project_url", f"https://next-gen.materialsproject.org/materials/{arguments['material_id']}")
         return payload
 
     def call_tool(self, tool_name: str, arguments: dict[str, Any], *, use_cache: bool = True) -> dict[str, Any]:
@@ -315,7 +327,10 @@ class MCPClientService:
             except Exception as exc:
                 last_error = exc
 
-        raise MCPClientError(f"Tool call failed for {tool_name} via {self.base_url}: {last_error}")
+        raise MCPClientError(
+            _friendly_tool_error(tool_name),
+            detail=f"Tool call failed for {tool_name} via {self.base_url}: {last_error}",
+        )
 
     def compare_materials(self, targets: list[str]) -> list[dict[str, Any]]:
         records: list[dict[str, Any]] = []
@@ -363,3 +378,25 @@ class MCPClientService:
                 endpoint=self.base_url,
                 error=str(exc),
             )
+
+    def qdrant_health(self) -> dict[str, Any]:
+        try:
+            return self.call_tool("rag_health_tool", {}, use_cache=False)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "collection": None,
+                "points_count": None,
+                "inference_model": None,
+                "error": getattr(exc, "detail", None) or str(exc),
+            }
+
+
+def _friendly_tool_error(tool_name: str) -> str:
+    if tool_name == "rag_search_tool":
+        return "Nearest-neighbor search is unavailable. Check Qdrant health and try again."
+    if tool_name == "get_material_by_id_tool":
+        return "Material lookup is unavailable right now. Try again in a moment."
+    if tool_name in {"search_material_tool", "search_materials_advanced_tool", "ask_materials_project_tool"}:
+        return "Materials search is unavailable right now. Try again in a moment."
+    return "The remote service is unavailable right now. Try again in a moment."

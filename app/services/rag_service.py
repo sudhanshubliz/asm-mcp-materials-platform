@@ -50,6 +50,29 @@ def _payload_text(payload: dict | None) -> str:
     return ""
 
 
+def qdrant_health() -> dict:
+    health = {
+        "ok": False,
+        "url_configured": bool(config.VECTOR_DB),
+        "collection": config.RAG_COLLECTION,
+        "inference_model": config.QDRANT_INFERENCE_MODEL,
+        "cloud_inference": bool(config.QDRANT_API_KEY),
+        "points_count": None,
+        "error": None,
+    }
+    try:
+        qdrant = _get_qdrant()
+        collection = qdrant.get_collection(config.RAG_COLLECTION)
+        points_count = getattr(collection, "points_count", None)
+        if points_count is None and isinstance(collection, dict):
+            points_count = collection.get("points_count")
+        health["points_count"] = points_count
+        health["ok"] = True
+    except Exception as exc:
+        health["error"] = str(exc)
+    return health
+
+
 def search_documents(query: str, top_k: int | None = None):
     qdrant = _get_qdrant()
     limit = top_k or config.RAG_TOP_K

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
 from streamlit_ui.utils.constants import DEFAULT_SUGGESTIONS
+
+_MP_ID_PATTERN = re.compile(r"\b(mp-\d+)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,16 @@ def _summarize_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _material_label(payload: dict[str, Any], query: str) -> str:
+    material_id = payload.get("material_id")
+    if material_id:
+        return str(material_id)
+    match = _MP_ID_PATTERN.search(query)
+    if match:
+        return match.group(1)
+    return query
+
+
 def normalize_mcp_response(tool_name: str, payload: dict[str, Any], query: str) -> NormalizedResult:
     if tool_name == "rag_search_tool":
         records = payload.get("data", []) if isinstance(payload, dict) else []
@@ -46,9 +59,10 @@ def normalize_mcp_response(tool_name: str, payload: dict[str, Any], query: str) 
     if tool_name == "get_material_by_id_tool":
         records = [payload]
         columns = list(payload.keys())
+        material_label = _material_label(payload, query)
         return NormalizedResult(
             intent="material_id_lookup",
-            title=f"Material snapshot for {payload.get('material_id', query)}",
+            title=f"Material snapshot for {material_label}",
             subtitle="Direct material lookup from the MCP server.",
             records=records,
             columns=columns,
@@ -92,7 +106,7 @@ def normalize_mcp_response(tool_name: str, payload: dict[str, Any], query: str) 
         material_payload = payload.get("materials_project", {})
         records = [material_payload] if material_payload else []
         columns = payload.get("columns") or (list(material_payload.keys()) if material_payload else [])
-        title = f"Material profile for {payload.get('material_id', query)}"
+        title = f"Material profile for {payload.get('material_id') or material_payload.get('material_id') or query}"
     else:
         records = payload.get("data") or payload.get("materials_project", {}).get("data", [])
         columns = payload.get("columns") or (list(records[0].keys()) if records else [])

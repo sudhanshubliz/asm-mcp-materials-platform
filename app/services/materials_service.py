@@ -12,6 +12,7 @@ from app.services.http_client import build_retrying_session
 MATERIAL_OUTPUT_COLUMNS = [
     "material_id",
     "materials_project_url",
+    "structure_preview",
     "nsites",
     "formula_pretty",
     "chemsys",
@@ -55,7 +56,13 @@ def _ensure_api_key() -> None:
 
 
 def _clean_doc(doc) -> dict:
-    payload = doc.model_dump()
+    try:
+        payload = doc.model_dump(mode="json")
+    except TypeError:
+        payload = doc.model_dump()
+    material_id = getattr(doc, "material_id", None)
+    if material_id is not None and not payload.get("material_id"):
+        payload["material_id"] = material_id
     payload.pop("fields_not_requested", None)
     return _normalize_output(payload)
 
@@ -78,9 +85,16 @@ def _extract_metric_values(metric) -> tuple[float | None, float | None, float | 
 def _canonical_material_id(value) -> str | None:
     if value is None:
         return None
+    if isinstance(value, dict):
+        for key in ("material_id", "id", "value"):
+            material_id = _canonical_material_id(value.get(key))
+            if material_id:
+                return material_id
+        return None
     material_id = str(value)
-    if _CANONICAL_MP_ID_PATTERN.fullmatch(material_id):
-        return material_id
+    match = re.search(r"\bmp-\d+\b", material_id)
+    if match:
+        return match.group(0)
     return None
 
 
@@ -88,6 +102,49 @@ def _materials_project_url(material_id: str | None) -> str | None:
     if material_id is None:
         return None
     return f"https://next-gen.materialsproject.org/materials/{material_id}"
+
+
+def _species_label(site: Any) -> str:
+    species = _obj_get(site, "species_string") or _obj_get(site, "label")
+    if species:
+        return str(species)
+    species_payload = _obj_get(site, "species")
+    if isinstance(species_payload, list) and species_payload:
+        first_species = species_payload[0]
+        return str(_obj_get(first_species, "element") or _obj_get(first_species, "species") or "")
+    return ""
+
+
+def _site_coordinates(site: Any) -> list[float] | None:
+    coords = _obj_get(site, "abc") or _obj_get(site, "frac_coords") or _obj_get(site, "xyz") or _obj_get(site, "coords")
+    if coords is None:
+        return None
+    try:
+        return [float(coords[0]), float(coords[1]), float(coords[2] if len(coords) > 2 else 0.0)]
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _structure_preview(structure: Any) -> dict[str, Any] | None:
+    if structure is None:
+        return None
+    sites = _obj_get(structure, "sites")
+    if not sites:
+        return None
+
+    atoms = []
+    for site in list(sites)[:48]:
+        coords = _site_coordinates(site)
+        if coords is None:
+            continue
+        element = re.sub(r"[^A-Za-z]", "", _species_label(site))[:2] or "X"
+        x = coords[0] % 1 if abs(coords[0]) <= 1.5 else coords[0]
+        y = coords[1] % 1 if abs(coords[1]) <= 1.5 else coords[1]
+        atoms.append({"element": element, "x": round(float(x), 4), "y": round(float(y), 4)})
+
+    if not atoms:
+        return None
+    return {"atoms": atoms, "site_count": len(sites), "shown": len(atoms)}
 
 
 def _normalize_output(payload: dict) -> dict:
@@ -102,6 +159,7 @@ def _normalize_output(payload: dict) -> dict:
     normalized = {
         "material_id": material_id,
         "materials_project_url": _materials_project_url(material_id),
+        "structure_preview": _structure_preview(payload.get("structure")),
         "nsites": payload.get("nsites"),
         "formula_pretty": payload.get("formula_pretty"),
         "chemsys": payload.get("chemsys"),
@@ -157,6 +215,7 @@ def _summary_fields() -> list[str]:
         "surface_anisotropy",
         "shape_factor",
         "symmetry",
+        "structure",
         "ordering",
         "bulk_modulus",
         "shear_modulus",

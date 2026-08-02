@@ -34,13 +34,26 @@ def main() -> None:
     st.caption(status.endpoint)
 
     if status.error:
-        st.error(status.error)
+        st.warning(status.error if status.ok else status.error)
 
-    tool_tab, health_tab = st.tabs(["Tools", "Health payload"])
+    qdrant = get_client().qdrant_health()
+    qdrant_label = "OK" if qdrant.get("ok") else "Unavailable"
+    st.metric("Qdrant", qdrant_label)
+    q_cols = st.columns(3)
+    q_cols[0].metric("Collection", qdrant.get("collection") or "N/A")
+    q_cols[1].metric("Points", qdrant.get("points_count") if qdrant.get("points_count") is not None else "N/A")
+    q_cols[2].metric("Embedding", qdrant.get("inference_model") or "N/A")
+
+    if qdrant.get("error"):
+        st.warning("Qdrant nearest-neighbor search is not ready. Expand the payload for details.")
+
+    tool_tab, health_tab, qdrant_tab = st.tabs(["Tools", "Health payload", "Qdrant"])
     with tool_tab:
         st.write(status.tools or [])
     with health_tab:
         st.json(status.health or {}, expanded=False)
+    with qdrant_tab:
+        st.json(qdrant, expanded=False)
 
 
 if __name__ == "__main__":

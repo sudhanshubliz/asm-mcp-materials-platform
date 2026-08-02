@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import MagicMock
 
 from streamlit_ui.services.mcp_client import LOCAL_MCP_URL, MCPClientService, RENDER_MCP_URL, _ask_compat_rest_payload
@@ -137,13 +138,11 @@ def test_call_tool_does_not_use_rest_fallback_for_local_mcp_failure(monkeypatch)
     monkeypatch.setattr(client, "_run_async", fail_mcp)
     monkeypatch.setattr(client, "_call_tool_via_rest", rest_call)
 
-    try:
+    with pytest.raises(Exception) as exc_info:
         client.call_tool("search_material_tool", {"formula": "Si"})
-    except Exception as exc:
-        assert "connection refused" in str(exc)
-    else:
-        raise AssertionError("Expected local MCP failure to be raised")
 
+    assert "Materials search is unavailable" in str(exc_info.value)
+    assert "connection refused" in exc_info.value.detail
     rest_call.assert_not_called()
 
 
@@ -165,6 +164,33 @@ def test_health_check_uses_rest_tool_list_when_mcp_listing_fails(monkeypatch):
     assert status.ok is True
     assert "search_material_tool" in status.tools
     assert "REST fallback is active" in str(status.error)
+
+
+def test_rest_material_lookup_preserves_requested_material_id(monkeypatch):
+    client = MCPClientService(base_url=RENDER_MCP_URL)
+    response = MagicMock()
+    response.json.return_value = {"material_id": None, "formula_pretty": "Si"}
+    response.raise_for_status.return_value = None
+    monkeypatch.setattr("streamlit_ui.services.mcp_client.httpx.get", MagicMock(return_value=response))
+
+    payload = client._call_tool_via_rest("get_material_by_id_tool", {"material_id": "mp-149"})
+
+    assert payload["material_id"] == "mp-149"
+    assert payload["materials_project_url"] == "https://next-gen.materialsproject.org/materials/mp-149"
+
+
+def test_qdrant_health_returns_unavailable_payload_on_failure(monkeypatch):
+    client = MCPClientService(base_url=RENDER_MCP_URL)
+    monkeypatch.setattr(
+        client,
+        "call_tool",
+        MagicMock(side_effect=RuntimeError("route missing")),
+    )
+
+    status = client.qdrant_health()
+
+    assert status["ok"] is False
+    assert "route missing" in status["error"]
 
 
 def test_ask_compat_payload_handles_lightweight_aerospace_alloys():

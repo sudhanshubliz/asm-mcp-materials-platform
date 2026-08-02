@@ -30,7 +30,7 @@ from app.tools.materials_tools import (
     search_material_tool,
     search_materials_advanced_tool,
 )
-from app.tools.rag_tools import rag_search_tool
+from app.tools.rag_tools import rag_health_tool, rag_search_tool
 from app.tools.sql_tools import run_sql_query
 
 setup_logging(config.LOG_LEVEL)
@@ -65,6 +65,7 @@ def create_mcp_server() -> FastMCP:
     mcp_server.add_tool(ask_materials_project_tool)
     mcp_server.add_tool(run_sql_query)
     mcp_server.add_tool(rag_search_tool)
+    mcp_server.add_tool(rag_health_tool)
     return mcp_server
 
 
@@ -323,6 +324,13 @@ def create_application() -> FastAPI:
         _roles: set[str] = Depends(require_role({"MaterialsReader", "MaterialsEngineer", "MaterialsAdmin"})),
     ):
         return rag_search_tool(payload.question, payload.top_k)
+
+    @api.get("/api/rag/health")
+    def rag_health(
+        _auth: str | None = Depends(require_authenticated_user),
+        _roles: set[str] = Depends(require_role({"MaterialsReader", "MaterialsEngineer", "MaterialsAdmin"})),
+    ):
+        return rag_health_tool()
 
     api.mount(config.MCP_PATH, mcp_http_app)
     return api
