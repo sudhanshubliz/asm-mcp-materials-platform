@@ -6,6 +6,7 @@ from app.services.exceptions import ExternalServiceError
 from app.services.materials_service import (
     MATERIAL_OUTPUT_COLUMNS,
     _canonical_material_id,
+    _extract_material_id,
     _get_material_by_id_rest,
     _normalize_output,
 )
@@ -68,6 +69,11 @@ def test_normalize_output_drops_non_numeric_material_id():
 def test_canonical_material_id_extracts_numeric_id_from_serialized_value():
     assert _canonical_material_id("MPID(mp-149)") == "mp-149"
     assert _canonical_material_id({"material_id": "MPID(mp-162)"}) == "mp-162"
+
+
+def test_extract_material_id_uses_fallback_task_ids():
+    assert _extract_material_id({"material_id": None, "task_ids": ["mp-7654321"]}) == "mp-7654321"
+    assert _extract_material_id({"origins": [{"task_id": "MPID(mp-1234567)"}]}) == "mp-1234567"
 
 
 def test_rest_material_lookup_rejects_mismatched_material_id():

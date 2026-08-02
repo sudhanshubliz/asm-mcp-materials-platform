@@ -63,6 +63,10 @@ def _clean_doc(doc) -> dict:
     material_id = getattr(doc, "material_id", None)
     if material_id is not None and not payload.get("material_id"):
         payload["material_id"] = material_id
+    for fallback_field in ("task_id", "task_ids", "deprecated_tasks", "origins"):
+        fallback_value = getattr(doc, fallback_field, None)
+        if fallback_value is not None and not payload.get(fallback_field):
+            payload[fallback_field] = fallback_value
     payload.pop("fields_not_requested", None)
     return _normalize_output(payload)
 
@@ -102,6 +106,34 @@ def _materials_project_url(material_id: str | None) -> str | None:
     if material_id is None:
         return None
     return f"https://next-gen.materialsproject.org/materials/{material_id}"
+
+
+def _extract_material_id(payload: dict) -> str | None:
+    for field_name in ("material_id", "task_id", "entry_id"):
+        material_id = _canonical_material_id(payload.get(field_name))
+        if material_id:
+            return material_id
+
+    for field_name in ("material_ids", "task_ids", "deprecated_tasks"):
+        values = payload.get(field_name)
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            material_id = _canonical_material_id(value)
+            if material_id:
+                return material_id
+
+    origins = payload.get("origins")
+    if isinstance(origins, list):
+        for origin in origins:
+            if not isinstance(origin, dict):
+                continue
+            for field_name in ("task_id", "material_id"):
+                material_id = _canonical_material_id(origin.get(field_name))
+                if material_id:
+                    return material_id
+
+    return None
 
 
 def _species_label(site: Any) -> str:
@@ -154,7 +186,7 @@ def _normalize_output(payload: dict) -> dict:
 
     bulk_voigt, bulk_reuss, bulk_vrh = _extract_metric_values(bulk_modulus)
     shear_voigt, shear_reuss, shear_vrh = _extract_metric_values(shear_modulus)
-    material_id = _canonical_material_id(payload.get("material_id"))
+    material_id = _extract_material_id(payload)
 
     normalized = {
         "material_id": material_id,
