@@ -12,6 +12,8 @@ from app.services.http_client import build_retrying_session
 MATERIAL_OUTPUT_COLUMNS = [
     "material_id",
     "materials_project_url",
+    "source",
+    "confidence",
     "structure_preview",
     "nsites",
     "formula_pretty",
@@ -60,9 +62,10 @@ def _clean_doc(doc) -> dict:
         payload = doc.model_dump(mode="json")
     except TypeError:
         payload = doc.model_dump()
-    material_id = getattr(doc, "material_id", None)
-    if material_id is not None and not payload.get("material_id"):
-        payload["material_id"] = material_id
+    serialized_material_id = _canonical_material_id(payload.get("material_id"))
+    attribute_material_id = _canonical_material_id(getattr(doc, "material_id", None))
+    if attribute_material_id or serialized_material_id:
+        payload["material_id"] = attribute_material_id or serialized_material_id
     for fallback_field in ("task_id", "task_ids", "deprecated_tasks", "origins"):
         fallback_value = getattr(doc, fallback_field, None)
         if fallback_value is not None and not payload.get(fallback_field):
@@ -90,7 +93,7 @@ def _canonical_material_id(value) -> str | None:
     if value is None:
         return None
     if isinstance(value, dict):
-        for key in ("material_id", "id", "value"):
+        for key in ("material_id", "id", "value", "string", "identifier"):
             material_id = _canonical_material_id(value.get(key))
             if material_id:
                 return material_id
@@ -191,6 +194,8 @@ def _normalize_output(payload: dict) -> dict:
     normalized = {
         "material_id": material_id,
         "materials_project_url": _materials_project_url(material_id),
+        "source": payload.get("source") or "Materials Project",
+        "confidence": payload.get("confidence"),
         "structure_preview": _structure_preview(payload.get("structure")),
         "nsites": payload.get("nsites"),
         "formula_pretty": payload.get("formula_pretty"),

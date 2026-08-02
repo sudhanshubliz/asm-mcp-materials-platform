@@ -6,6 +6,7 @@ from app.services.exceptions import ExternalServiceError
 from app.services.materials_service import (
     MATERIAL_OUTPUT_COLUMNS,
     _canonical_material_id,
+    _clean_doc,
     _extract_material_id,
     _get_material_by_id_rest,
     _normalize_output,
@@ -50,6 +51,8 @@ def test_normalize_output_matches_requested_headers_and_aliases():
     assert list(row.keys()) == MATERIAL_OUTPUT_COLUMNS
     assert row["material_id"] == "mp-123"
     assert row["materials_project_url"] == "https://next-gen.materialsproject.org/materials/mp-123"
+    assert row["source"] == "Materials Project"
+    assert row["confidence"] is None
     assert row["structure_preview"]["site_count"] == 2
     assert row["structure_preview"]["atoms"][0]["element"] == "Fe"
     assert row["predicted_stable"] is True
@@ -69,6 +72,23 @@ def test_normalize_output_drops_non_numeric_material_id():
 def test_canonical_material_id_extracts_numeric_id_from_serialized_value():
     assert _canonical_material_id("MPID(mp-149)") == "mp-149"
     assert _canonical_material_id({"material_id": "MPID(mp-162)"}) == "mp-162"
+    assert _canonical_material_id({"@class": "MPID", "string": "mp-2534"}) == "mp-2534"
+
+
+def test_clean_doc_prefers_canonical_attribute_over_unreadable_serialized_id():
+    class SerializedMaterialDoc:
+        material_id = "mp-149"
+
+        def model_dump(self, *, mode=None):
+            return {
+                "material_id": {"@module": "emmet.core.mpid", "@class": "MPID"},
+                "formula_pretty": "Si",
+            }
+
+    row = _clean_doc(SerializedMaterialDoc())
+
+    assert row["material_id"] == "mp-149"
+    assert row["materials_project_url"] == "https://next-gen.materialsproject.org/materials/mp-149"
 
 
 def test_extract_material_id_uses_fallback_task_ids():

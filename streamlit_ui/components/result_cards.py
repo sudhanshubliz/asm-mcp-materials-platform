@@ -11,7 +11,7 @@ from streamlit_ui.utils.exports import records_to_csv, records_to_dataframe, rec
 
 _CANONICAL_MP_ID_PATTERN = re.compile(r"^mp-\d+$")
 _STRUCTURE_IMAGE_FIELDS = ("structure_image_url", "structure_url", "image_url", "thumbnail_url")
-_NON_TABLE_FIELDS = {"structure_preview"}
+_NON_TABLE_FIELDS = {"structure_preview", "confidence"}
 _PRIMARY_FIELDS = (
     "material_id",
     "formula_pretty",
@@ -96,7 +96,6 @@ def _structure_preview_svg(preview: dict[str, Any]) -> str | None:
 
 def _render_structure_preview(record: dict[str, Any]) -> None:
     image_url = _structure_image_url(record)
-    material_url = record.get("materials_project_url") or _materials_project_url(record.get("material_id"))
     preview = record.get("structure_preview")
 
     if image_url:
@@ -108,13 +107,22 @@ def _render_structure_preview(record: dict[str, Any]) -> None:
         if svg:
             st.markdown(svg, unsafe_allow_html=True)
             st.caption("Small projected structure preview")
-            if isinstance(material_url, str):
-                st.link_button("Open full structure on Materials Project", material_url, use_container_width=True)
             return
 
+    st.caption("Inline structure preview is not available for this result.")
+
+
+def _record_provenance(record: dict[str, Any]) -> tuple[str, str]:
+    source = str(record.get("source") or "Materials Project")
+    confidence = record.get("confidence")
+    confidence_label = "Not reported" if confidence is None else _display_value(confidence)
+    return source, confidence_label
+
+
+def _render_material_actions(record: dict[str, Any]) -> None:
+    material_url = record.get("materials_project_url") or _materials_project_url(record.get("material_id"))
     if isinstance(material_url, str):
-        st.caption("Inline structure preview is not available for this result.")
-        st.link_button("Open structure on Materials Project", material_url, use_container_width=True)
+        st.link_button("Open in Materials Project", material_url, use_container_width=True)
 
 
 def _display_value(value: Any) -> str:
@@ -179,16 +187,23 @@ def render_result(
         )
 
         st.markdown("##### Result cards")
-        for record in records[: (3 if compact_mode else 5)]:
+        card_limit = 3 if compact_mode else 5
+        visible_records = records[:card_limit]
+        if len(records) > len(visible_records):
+            st.caption(f"Showing {len(visible_records)} of {len(records)} result cards. The table and downloads include all results.")
+        for record in visible_records:
             label = record.get("material_id") or record.get("formula_pretty") or "Material"
             with st.expander(f"{label} • {record.get('formula_pretty', 'Unknown formula')}", expanded=not compact_mode):
+                source, confidence = _record_provenance(record)
+                st.caption(f"Source: {source} | Confidence: {confidence}")
                 cols = st.columns(4)
                 cols[0].metric("Band gap (eV)", _display_value(record.get("band_gap")))
-                cols[1].metric("Density", _display_value(record.get("density")))
+                cols[1].metric("Density (g/cm³)", _display_value(record.get("density")))
                 cols[2].metric("Stable", _display_value(record.get("predicted_stable")))
                 cols[3].metric("Metal", _display_value(record.get("is_metal")))
                 st.table(_record_summary(record))
                 _render_structure_preview(record)
+                _render_material_actions(record)
                 with st.expander("Raw record", expanded=False):
                     st.json(record, expanded=False)
     else:

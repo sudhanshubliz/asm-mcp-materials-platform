@@ -1,5 +1,6 @@
 from streamlit_ui.components.result_cards import (
     _materials_project_url,
+    _record_provenance,
     _structure_image_url,
     _structure_preview_svg,
     _table_records,
@@ -56,3 +57,11 @@ def test_table_records_hide_structure_preview_and_all_empty_columns():
         {"material_id": "mp-1", "formula_pretty": "AlCu"},
         {"material_id": "mp-2", "formula_pretty": "AlCr"},
     ]
+
+
+def test_record_provenance_does_not_invent_confidence():
+    assert _record_provenance({"source": "Materials Project", "confidence": None}) == (
+        "Materials Project",
+        "Not reported",
+    )
+    assert _record_provenance({"source": "Qdrant", "confidence": 0.91234}) == ("Qdrant", "0.9123")
