@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -10,24 +11,49 @@ from typing import Any
 
 CANONICAL_MP_ID = re.compile(r"^mp-\d+$")
 DEFAULT_BASE_URL = "https://asm-mcp-materials-platform.onrender.com"
+TRANSIENT_HTTP_CODES = {408, 429, 500, 502, 503, 504}
+DEFAULT_ATTEMPTS = 3
+DEFAULT_TIMEOUT_SECONDS = 60
+DEFAULT_RETRY_DELAY_SECONDS = 5
 
 
-def _request_json(base_url: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def _request_json(
+    base_url: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    attempts: int = DEFAULT_ATTEMPTS,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    retry_delay_seconds: int = DEFAULT_RETRY_DELAY_SECONDS,
+) -> dict[str, Any]:
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
     body = None if payload is None else json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        f"{base_url.rstrip('/')}{path}",
-        data=body,
-        headers={"Content-Type": "application/json"} if body else {},
-        method="POST" if body else "GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=45) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:500]
-        raise RuntimeError(f"{path} returned HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"{path} could not be reached: {exc.reason}") from exc
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(
+            f"{base_url.rstrip('/')}{path}",
+            data=body,
+            headers={"Content-Type": "application/json"} if body else {},
+            method="POST" if body else "GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            if exc.code not in TRANSIENT_HTTP_CODES or attempt == attempts:
+                raise RuntimeError(
+                    f"{path} returned HTTP {exc.code} after {attempt} attempt(s): {detail}"
+                ) from exc
+        except (TimeoutError, urllib.error.URLError) as exc:
+            if attempt == attempts:
+                reason = getattr(exc, "reason", exc)
+                raise RuntimeError(f"{path} could not be reached after {attempt} attempt(s): {reason}") from exc
+
+        time.sleep(retry_delay_seconds * attempt)
+
+    raise AssertionError("request retry loop exited unexpectedly")
 
 
 def run_smoke_checks(base_url: str) -> None:
